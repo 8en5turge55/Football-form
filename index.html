@@ -279,8 +279,7 @@
 </footer>
 
 <script>
-const API_KEY = '59c26c14f9154e798468aef0c267f0ad';
-const BASE    = 'https://api.football-data.org/v4';
+const BASE    = 'https://football-proxy.bensturgess83.workers.dev';
 
 const LEAGUES = [
   { code: 'PL',  label: 'Premier League' },
@@ -307,7 +306,7 @@ let current = 'PL';
 const cache  = {};
 
 async function apiFetch(path) {
-  const res = await fetch(BASE + path, { headers: { 'X-Auth-Token': API_KEY } });
+  const res = await fetch(BASE + path);
   if (!res.ok) throw new Error(`API returned ${res.status} for ${path}`);
   return res.json();
 }
