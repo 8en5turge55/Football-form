@@ -426,9 +426,14 @@ function render(code, data) {
       }
     }
 
+    const rankStyle = c
+      ? `style="border-left:3px solid ${c.text};background:${c.bg}"`
+      : `style="border-left:3px solid transparent"`;
+    const teamStyle = c ? `style="background:${c.bg}"` : '';
+
     return `<tr>
-      <td class="col-rank"><span class="rank">${i + 1}</span></td>
-      <td class="col-team"><span class="team-name">${t.name}</span></td>
+      <td class="col-rank" ${rankStyle}><span class="rank">${i + 1}</span></td>
+      <td class="col-team" ${teamStyle}><span class="team-name">${t.name}</span></td>
       <td class="col-pts r"><span class="pts-val">${t.formPts}</span></td>
       <td class="col-wdl r"><span class="wdl-val">${t.formW}</span></td>
       <td class="col-wdl r"><span class="wdl-val">${t.formD}</span></td>
