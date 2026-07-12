@@ -326,7 +326,7 @@
   <nav class="view-nav">
     <button class="view-tab active" id="nav-leagues" onclick="showView('leagues')">League Tables</button>
     <button class="view-tab"        id="nav-bets"    onclick="showView('bets')">⚡ Best Bets</button>
-    <label class="toggle-wrap" id="testing-toggle" style="display:none" title="Testing mode">
+    <label class="toggle-wrap" id="testing-toggle" title="Testing mode">
       <span>Testing</span>
       <div class="toggle-track" id="testing-track">
         <div class="toggle-thumb"></div>
@@ -745,7 +745,7 @@ window.showView = function(view) {
   document.getElementById('view-bets').style.display    = view === 'bets'    ? '' : 'none';
   document.getElementById('nav-leagues').classList.toggle('active', view === 'leagues');
   document.getElementById('nav-bets').classList.toggle('active',    view === 'bets');
-  document.getElementById('testing-toggle').style.display = view === 'bets' ? '' : 'none';
+
 
   if (view === 'bets') loadBets();
 };
@@ -804,7 +804,7 @@ async function switchLeague(code) {
       '<div class="status"><span class="spinner"></span> Loading data…</div>';
   }
   try {
-    const data = await loadLeague(code);
+    const data = await loadLeague(code, asOf);
     render(code, data);
   } catch (e) {
     document.getElementById('content').innerHTML =
