@@ -387,7 +387,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.16</span>
+  <span style="color:var(--border2)">v1.17</span>
 </footer>
 
 <script>
@@ -458,21 +458,21 @@ const rawCache = {};
 
 async function fetchRaw(code, forceRefresh) {
   if (rawCache[code] && !forceRefresh) return rawCache[code];
-  const [standData, finishedData, scheduledData] = await Promise.all([
+  // Fetch all matches in one call — status filter not supported on free tier
+  const [standData, allMatchData] = await Promise.all([
     apiFetch(`/competitions/${code}/standings`),
-    apiFetch(`/competitions/${code}/matches?status=FINISHED`),
-    apiFetch(`/competitions/${code}/matches?status=SCHEDULED`),
+    apiFetch(`/competitions/${code}/matches`),
   ]);
-  const finished   = finishedData.matches  || [];
-  const scheduled  = scheduledData.matches || [];
-  const allMatches = [...finished, ...scheduled];
+  const all = allMatchData.matches || [];
+  const finished  = all.filter(m => m.status === 'FINISHED');
+  const scheduled = all.filter(m => m.status !== 'FINISHED');
   console.log('[fetchRaw]', code,
+    '| total:', all.length,
     '| finished:', finished.length,
     '| scheduled:', scheduled.length,
     '| earliest finished:', finished.length ? finished.reduce((a,b) => a.utcDate < b.utcDate ? a : b).utcDate : 'none',
     '| latest finished:',   finished.length ? finished.reduce((a,b) => a.utcDate > b.utcDate ? a : b).utcDate : 'none'
   );
-  const allMatchData = { matches: allMatches };
   rawCache[code] = { standData, allMatchData };
   return rawCache[code];
 }
