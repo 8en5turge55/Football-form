@@ -387,7 +387,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.21</span>
+  <span style="color:var(--border2)">v1.22</span>
 </footer>
 
 <script>
@@ -458,22 +458,32 @@ const rawCache = {};
 
 async function fetchRaw(code, forceRefresh) {
   if (rawCache[code] && !forceRefresh) return rawCache[code];
-  // Fetch all matches in one call — status filter not supported on free tier
-  const [standData, allMatchData] = await Promise.all([
-    apiFetch(`/competitions/${code}/standings`),
-    apiFetch(`/competitions/${code}/matches`),
-  ]);
-  const all = allMatchData.matches || [];
-  const finished  = all.filter(m => m.status === 'FINISHED');
-  const scheduled = all.filter(m => m.status !== 'FINISHED');
-  // Log all unique status values to diagnose
-  const statuses = {};
-  all.forEach(m => { statuses[m.status] = (statuses[m.status] || 0) + 1; });
-  console.log('[fetchRaw]', code,
-    '| total:', all.length,
-    '| statuses:', JSON.stringify(statuses),
-    '| sample match:', all[0] ? JSON.stringify({status: all[0].status, utcDate: all[0].utcDate, score: all[0].score}) : 'none'
-  );
+  // The API rolls over to next season ~30 days before it starts.
+  // Try seasons backwards until we find one with FINISHED matches.
+  const currentYear = new Date().getFullYear();
+  let standData, allMatchData;
+  for (const yr of [currentYear - 1, currentYear - 2, currentYear]) {
+    console.log(`[fetchRaw] ${code} trying season=${yr}`);
+    let sd, md;
+    try {
+      [sd, md] = await Promise.all([
+        apiFetch(`/competitions/${code}/standings?season=${yr}`),
+        apiFetch(`/competitions/${code}/matches?season=${yr}`),
+      ]);
+    } catch(e) {
+      console.log(`[fetchRaw] ${code} season=${yr} error:`, e.message);
+      continue;
+    }
+    const matches = md.matches || [];
+    const nFinished = matches.filter(m => m.status === 'FINISHED').length;
+    console.log(`[fetchRaw] ${code} season=${yr} | total=${matches.length} | finished=${nFinished} | sample=${matches[0] ? matches[0].utcDate + ' ' + matches[0].status : 'none'}`);
+    if (nFinished > 0) {
+      standData    = sd;
+      allMatchData = md;
+      break;
+    }
+    if (!standData) { standData = sd; allMatchData = md; }
+  }
   rawCache[code] = { standData, allMatchData };
   return rawCache[code];
 }
