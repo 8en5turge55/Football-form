@@ -373,7 +373,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.11</span>
+  <span style="color:var(--border2)">v1.12</span>
 </footer>
 
 <script>
@@ -444,11 +444,10 @@ const rawCache = {};
 
 async function fetchRaw(code) {
   if (rawCache[code]) return rawCache[code];
-  // Fetch standings + full season matches (no limit param — get all via date range)
-  const season = new Date().getFullYear();
+  // Fetch standings + all matches for current season
   const [standData, allMatchData] = await Promise.all([
     apiFetch(`/competitions/${code}/standings`),
-    apiFetch(`/competitions/${code}/matches?dateFrom=${season - 1}-06-01&dateTo=${season + 1}-06-30`),
+    apiFetch(`/competitions/${code}/matches`),
   ]);
   rawCache[code] = { standData, allMatchData };
   return rawCache[code];
