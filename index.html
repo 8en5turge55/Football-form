@@ -387,7 +387,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.14</span>
+  <span style="color:var(--border2)">v1.15</span>
 </footer>
 
 <script>
@@ -482,12 +482,19 @@ async function loadLeague(code, asOfDate) {
   if (cache[cacheKey]) return cache[cacheKey];
 
   const { standData, allMatchData } = await fetchRaw(code);
+  const allMatches = allMatchData.matches || [];
 
+  // Build team list from standings (for names/ids) but recalculate all stats from match history
   const teams = standData.standings[0].table.map(row => ({
     id:      row.team.id,
     name:    row.team.shortName || row.team.name,
-    pts:     row.points,
-    played:  row.playedGames,
+    pts:     0,   // will be recalculated from matches
+    played:  0,
+    won:     0,
+    drawn:   0,
+    lost:    0,
+    gf:      0,
+    ga:      0,
     results: [],
     formPts: 0,
     formW:   0,
@@ -496,19 +503,31 @@ async function loadLeague(code, asOfDate) {
   }));
 
   const teamMap = Object.fromEntries(teams.map(t => [t.id, t]));
-  const allMatches = allMatchData.matches || [];
 
-  // Matches completed before asOf — used for form
-  const finished = allMatches
+  // All finished matches up to asOf — sorted newest first for form, oldest first for standings
+  const finishedBeforeAsOf = allMatches
     .filter(m => m.status === 'FINISHED' && new Date(m.utcDate) <= asOf)
     .sort((a, b) => new Date(b.utcDate) - new Date(a.utcDate));
 
-  for (const m of finished) {
+  console.log('[loadLeague]', code, 'finished matches before asOf:', finishedBeforeAsOf.length);
+
+  // Rebuild full season standings from match history
+  for (const m of finishedBeforeAsOf) {
     const h  = teamMap[m.homeTeam.id];
     const a  = teamMap[m.awayTeam.id];
     const hg = m.score?.fullTime?.home;
     const ag = m.score?.fullTime?.away;
     if (!h || !a || hg === null || hg === undefined) continue;
+
+    h.played++; a.played++;
+    h.gf += hg; h.ga += ag;
+    a.gf += ag; a.ga += hg;
+
+    if (hg > ag)      { h.won++;   h.pts += 3; a.lost++; }
+    else if (hg < ag) { a.won++;   a.pts += 3; h.lost++; }
+    else              { h.drawn++; h.pts += 1; a.drawn++; a.pts += 1; }
+
+    // Last 8 form (array is already newest-first due to sort)
     if (h.results.length < 8) h.results.push(hg > ag ? 'W' : hg < ag ? 'L' : 'D');
     if (a.results.length < 8) a.results.push(ag > hg ? 'W' : ag < hg ? 'L' : 'D');
   }
