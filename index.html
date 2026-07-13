@@ -387,7 +387,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.17</span>
+  <span style="color:var(--border2)">v1.18</span>
 </footer>
 
 <script>
@@ -466,12 +466,13 @@ async function fetchRaw(code, forceRefresh) {
   const all = allMatchData.matches || [];
   const finished  = all.filter(m => m.status === 'FINISHED');
   const scheduled = all.filter(m => m.status !== 'FINISHED');
+  // Log all unique status values to diagnose
+  const statuses = {};
+  all.forEach(m => { statuses[m.status] = (statuses[m.status] || 0) + 1; });
   console.log('[fetchRaw]', code,
     '| total:', all.length,
-    '| finished:', finished.length,
-    '| scheduled:', scheduled.length,
-    '| earliest finished:', finished.length ? finished.reduce((a,b) => a.utcDate < b.utcDate ? a : b).utcDate : 'none',
-    '| latest finished:',   finished.length ? finished.reduce((a,b) => a.utcDate > b.utcDate ? a : b).utcDate : 'none'
+    '| statuses:', JSON.stringify(statuses),
+    '| sample match:', all[0] ? JSON.stringify({status: all[0].status, utcDate: all[0].utcDate, score: all[0].score}) : 'none'
   );
   rawCache[code] = { standData, allMatchData };
   return rawCache[code];
