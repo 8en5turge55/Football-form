@@ -373,7 +373,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.12</span>
+  <span style="color:var(--border2)">v1.13</span>
 </footer>
 
 <script>
@@ -442,13 +442,21 @@ function getAsOfDate() {
 // Raw match data cache (separate from processed cache so we can reprocess for different dates)
 const rawCache = {};
 
-async function fetchRaw(code) {
-  if (rawCache[code]) return rawCache[code];
-  // Fetch standings + all matches for current season
-  const [standData, allMatchData] = await Promise.all([
+async function fetchRaw(code, forceRefresh) {
+  if (rawCache[code] && !forceRefresh) return rawCache[code];
+  // Fetch standings, finished matches, and scheduled matches separately
+  // to maximise data available for any selected date
+  const [standData, finishedData, scheduledData] = await Promise.all([
     apiFetch(`/competitions/${code}/standings`),
-    apiFetch(`/competitions/${code}/matches`),
+    apiFetch(`/competitions/${code}/matches?status=FINISHED`),
+    apiFetch(`/competitions/${code}/matches?status=SCHEDULED`),
   ]);
+  // Merge into one matches array
+  const allMatches = [
+    ...(finishedData.matches || []),
+    ...(scheduledData.matches || []),
+  ];
+  const allMatchData = { matches: allMatches };
   rawCache[code] = { standData, allMatchData };
   return rawCache[code];
 }
@@ -764,15 +772,17 @@ document.getElementById('testing-toggle').addEventListener('click', function() {
   testingMode = !testingMode;
   document.getElementById('testing-track').classList.toggle('on', testingMode);
   document.getElementById('testing-date-wrap').style.display = testingMode ? '' : 'none';
-  // Clear processed cache so switching in/out of testing mode recalculates
+  // Clear both caches on toggle
   Object.keys(cache).forEach(k => delete cache[k]);
+  Object.keys(rawCache).forEach(k => delete rawCache[k]);
   if (currentView === 'bets') loadBets();
   else switchLeague(currentLeague);
 });
 
 document.getElementById('testing-date').addEventListener('change', function() {
-  // Clear processed cache so new date is recalculated (raw data is reused)
+  // Clear both caches so data is re-fetched and reprocessed for the new date
   Object.keys(cache).forEach(k => delete cache[k]);
+  Object.keys(rawCache).forEach(k => delete rawCache[k]);
   if (currentView === 'bets') loadBets();
   else switchLeague(currentLeague);
 });
