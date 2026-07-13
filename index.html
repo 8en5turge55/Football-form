@@ -328,7 +328,7 @@
     <button class="view-tab active" id="nav-leagues" onclick="showView('leagues')">League Tables</button>
     <button class="view-tab"        id="nav-bets"    onclick="showView('bets')">⚡ Best Bets</button>
     <label class="toggle-wrap" id="testing-toggle" title="Testing mode">
-      <span>Testing</span>
+      <span>Test Mode</span>
       <div class="toggle-track" id="testing-track">
         <div class="toggle-thumb"></div>
       </div>
@@ -373,7 +373,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.10</span>
+  <span style="color:var(--border2)">v1.11</span>
 </footer>
 
 <script>
@@ -430,7 +430,11 @@ async function apiFetch(path) {
 function getAsOfDate() {
   if (testingMode) {
     const val = document.getElementById('testing-date').value;
-    if (val) return new Date(val + 'T23:59:59');
+    if (val) {
+      // Use end of selected day in UTC so full day's matches are included
+      const d = new Date(val + 'T23:59:59Z');
+      return d;
+    }
   }
   return new Date();
 }
@@ -440,9 +444,11 @@ const rawCache = {};
 
 async function fetchRaw(code) {
   if (rawCache[code]) return rawCache[code];
+  // Fetch standings + full season matches (no limit param — get all via date range)
+  const season = new Date().getFullYear();
   const [standData, allMatchData] = await Promise.all([
     apiFetch(`/competitions/${code}/standings`),
-    apiFetch(`/competitions/${code}/matches?limit=380`),
+    apiFetch(`/competitions/${code}/matches?dateFrom=${season - 1}-06-01&dateTo=${season + 1}-06-30`),
   ]);
   rawCache[code] = { standData, allMatchData };
   return rawCache[code];
