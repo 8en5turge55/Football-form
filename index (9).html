@@ -61,6 +61,7 @@
       gap: 0;
       margin-bottom: 1.75rem;
       border-bottom: 1px solid var(--border);
+      align-items: center;
     }
     .view-tab {
       padding: 8px 18px;
@@ -81,7 +82,7 @@
     /* Testing toggle */
     .toggle-wrap {
       display: flex; align-items: center; gap: 8px;
-      margin-left: auto; padding-bottom: 1px;
+      margin-left: auto; padding: 0 0 1px 16px;
       font-size: 12px; color: var(--muted); font-family: var(--mono);
       cursor: pointer; user-select: none;
     }
@@ -372,6 +373,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
+  <span style="color:var(--border2)">v1.10</span>
 </footer>
 
 <script>
