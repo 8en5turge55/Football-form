@@ -122,6 +122,19 @@
     }
     #testing-date:hover, #testing-date:focus { border-color: var(--accent); }
     #testing-date::-webkit-calendar-picker-indicator { filter: invert(0.6); cursor: pointer; }
+    #testing-apply {
+      padding: 3px 10px;
+      background: var(--accent);
+      color: var(--accent-fg);
+      border: none;
+      border-radius: var(--radius);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    #testing-apply:hover { opacity: 0.85; }
 
     /* League tabs */
     .tabs {
@@ -336,6 +349,7 @@
     <div class="testing-date-wrap" id="testing-date-wrap" style="display:none">
       <label for="testing-date">Date</label>
       <input type="date" id="testing-date" />
+      <button id="testing-apply">Apply</button>
     </div>
   </nav>
 
@@ -373,7 +387,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.13</span>
+  <span style="color:var(--border2)">v1.14</span>
 </footer>
 
 <script>
@@ -462,8 +476,9 @@ async function fetchRaw(code, forceRefresh) {
 }
 
 async function loadLeague(code, asOfDate) {
-  const asOf    = asOfDate || getAsOfDate();
+  const asOf     = asOfDate instanceof Date ? asOfDate : getAsOfDate();
   const cacheKey = code + '_' + asOf.toISOString().slice(0, 10);
+  console.log('[loadLeague]', code, 'asOf:', asOf.toISOString(), 'cacheKey:', cacheKey, 'cached:', !!cache[cacheKey]);
   if (cache[cacheKey]) return cache[cacheKey];
 
   const { standData, allMatchData } = await fetchRaw(code);
@@ -540,8 +555,6 @@ async function loadLeague(code, asOfDate) {
 
   const data = { teams, teamMap, nextRound, fetched: new Date(), asOf };
   cache[cacheKey] = data;
-  // Also store under plain code key for non-testing access
-  if (!asOfDate) cache[code] = data;
   return data;
 }
 
@@ -779,10 +792,11 @@ document.getElementById('testing-toggle').addEventListener('click', function() {
   else switchLeague(currentLeague);
 });
 
-document.getElementById('testing-date').addEventListener('change', function() {
-  // Clear both caches so data is re-fetched and reprocessed for the new date
+document.getElementById('testing-apply').addEventListener('click', function() {
+  // Clear both caches so data is re-fetched and reprocessed for the selected date
   Object.keys(cache).forEach(k => delete cache[k]);
   Object.keys(rawCache).forEach(k => delete rawCache[k]);
+  console.log('[TestMode] Apply clicked. asOf =', getAsOfDate().toISOString());
   if (currentView === 'bets') loadBets();
   else switchLeague(currentLeague);
 });
