@@ -387,7 +387,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.15</span>
+  <span style="color:var(--border2)">v1.16</span>
 </footer>
 
 <script>
@@ -458,18 +458,20 @@ const rawCache = {};
 
 async function fetchRaw(code, forceRefresh) {
   if (rawCache[code] && !forceRefresh) return rawCache[code];
-  // Fetch standings, finished matches, and scheduled matches separately
-  // to maximise data available for any selected date
   const [standData, finishedData, scheduledData] = await Promise.all([
     apiFetch(`/competitions/${code}/standings`),
     apiFetch(`/competitions/${code}/matches?status=FINISHED`),
     apiFetch(`/competitions/${code}/matches?status=SCHEDULED`),
   ]);
-  // Merge into one matches array
-  const allMatches = [
-    ...(finishedData.matches || []),
-    ...(scheduledData.matches || []),
-  ];
+  const finished   = finishedData.matches  || [];
+  const scheduled  = scheduledData.matches || [];
+  const allMatches = [...finished, ...scheduled];
+  console.log('[fetchRaw]', code,
+    '| finished:', finished.length,
+    '| scheduled:', scheduled.length,
+    '| earliest finished:', finished.length ? finished.reduce((a,b) => a.utcDate < b.utcDate ? a : b).utcDate : 'none',
+    '| latest finished:',   finished.length ? finished.reduce((a,b) => a.utcDate > b.utcDate ? a : b).utcDate : 'none'
+  );
   const allMatchData = { matches: allMatches };
   rawCache[code] = { standData, allMatchData };
   return rawCache[code];
