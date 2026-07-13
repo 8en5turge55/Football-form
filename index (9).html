@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Football Form Table</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0d0d;
+      --surface:   #141414;
+      --surface2:  #1c1c1c;
+      --border:    rgba(255,255,255,0.08);
+      --border2:   rgba(255,255,255,0.14);
+      --text:      #f0f0ee;
+      --muted:     #888;
+      --accent:    #c8f04a;
+      --accent-fg: #0d0d0d;
+      --win:       #4ade80;
+      --draw:      #888;
+      --loss:      #f87171;
+      --font:      'Inter', system-ui, sans-serif;
+      --mono:      'IBM Plex Mono', monospace;
+      --radius:    6px;
+      --radius-lg: 10px;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* Layout */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 2rem;
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+    }
+    header h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.02em; }
+    header span { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 1.5rem 2rem 4rem;
+    }
+
+    /* Top-level view nav */
+    .view-nav {
+      display: flex;
+      gap: 0;
+      margin-bottom: 1.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .view-tab {
+      padding: 8px 18px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--muted);
+      font-size: 13px;
+      font-family: var(--font);
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.12s;
+      margin-bottom: -1px;
+    }
+    .view-tab:hover { color: var(--text); }
+    .view-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* Testing toggle */
+    .toggle-wrap {
+      display: flex; align-items: center; gap: 8px;
+      margin-left: auto; padding-bottom: 1px;
+      font-size: 12px; color: var(--muted); font-family: var(--mono);
+      cursor: pointer; user-select: none;
+    }
+    .toggle-wrap:hover { color: var(--text); }
+    .toggle-track {
+      position: relative; width: 32px; height: 18px;
+      background: var(--border2); border-radius: 9px;
+      transition: background 0.2s; flex-shrink: 0;
+    }
+    .toggle-track.on { background: var(--accent); }
+    .toggle-thumb {
+      position: absolute; top: 3px; left: 3px;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: #fff; transition: left 0.2s;
+    }
+    .toggle-track.on .toggle-thumb { left: 17px; background: var(--accent-fg); }
+
+    /* Testing date picker */
+    .testing-date-wrap {
+      display: flex; align-items: center; gap: 7px;
+      margin-left: 12px; padding-left: 12px;
+      border-left: 1px solid var(--border2);
+      font-size: 12px; color: var(--muted); font-family: var(--mono);
+    }
+    .testing-date-wrap label { white-space: nowrap; }
+    #testing-date {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 3px 7px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    #testing-date:hover, #testing-date:focus { border-color: var(--accent); }
+    #testing-date::-webkit-calendar-picker-indicator { filter: invert(0.6); cursor: pointer; }
+
+    /* League tabs */
+    .tabs {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+    .tab-group { display: flex; flex-direction: column; gap: 5px; }
+    .tab-group-label {
+      font-size: 10px; font-family: var(--mono);
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--muted); padding-left: 2px;
+    }
+    .tab-group-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+    .tab {
+      padding: 5px 13px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: all 0.12s;
+      white-space: nowrap;
+    }
+    .tab:hover { border-color: var(--border2); color: var(--text); }
+    .tab.active {
+      background: var(--accent); color: var(--accent-fg);
+      border-color: var(--accent); font-weight: 600;
+    }
+
+    /* Legend */
+    .legend {
+      display: flex; flex-wrap: wrap;
+      gap: 8px 16px; margin-bottom: 1.25rem; min-height: 22px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-family: var(--mono); }
+    .swatch { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      text-align: left; padding: 7px 10px;
+      color: var(--muted); font-weight: 400; font-size: 11px;
+      font-family: var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    th.r, td.r { text-align: right; }
+    td {
+      padding: 9px 10px; border-bottom: 1px solid var(--border);
+      vertical-align: middle; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; max-width: 0;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface2); }
+
+    .col-rank { width: 32px; }
+    .col-team { width: 170px; min-width: 130px; }
+    .col-pts  { width: 44px; }
+    .col-wdl  { width: 36px; }
+    .col-form { width: 100px; }
+    .col-fix  { width: auto; min-width: 180px; }
+
+    .rank     { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+    .team-name{ font-weight: 500; color: var(--text); }
+    .pts-val  { font-family: var(--mono); font-weight: 600; color: var(--accent); }
+    .wdl-val  { font-family: var(--mono); color: var(--muted); font-size: 12px; }
+
+    /* Form dots */
+    .dots { display: flex; gap: 3px; align-items: center; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-w { background: var(--win); }
+    .dot-d { background: var(--draw); }
+    .dot-l { background: var(--loss); }
+
+    /* Result pill */
+    .fix-result {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-family: var(--mono); font-size: 11px; font-weight: 600;
+      white-space: nowrap;
+    }
+    .fix-result-score {
+      padding: 1px 6px; border-radius: 4px;
+      background: var(--surface2); border: 1px solid var(--border2);
+      color: var(--text); letter-spacing: 0.04em;
+    }
+    .fix-result-winner { color: var(--accent); font-size: 11px; }
+    .fix-result-draw   { color: var(--muted);  font-size: 11px; }
+
+    /* Fixture badge */
+    .fix-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 8px; border-radius: 20px;
+      font-size: 11px; font-family: var(--mono); font-weight: 500;
+      white-space: nowrap; border: 1px solid transparent;
+    }
+    .fix-ha { font-size: 10px; opacity: 0.7; font-weight: 400; }
+
+    /* Form key */
+    .form-key { display: flex; gap: 12px; margin-bottom: 1rem; font-size: 11px; color: var(--muted); }
+    .form-key-item { display: flex; align-items: center; gap: 5px; }
+
+    /* Best Bets */
+    .bets-header {
+      font-size: 12px; color: var(--muted); margin-bottom: 1.5rem; line-height: 1.7;
+      border-left: 2px solid var(--border2); padding-left: 10px;
+    }
+    .bets-loading { padding: 2rem 0; color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+    .bets-empty   { padding: 2rem 0; color: var(--muted); font-size: 13px; }
+    .bet-card {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-rows: auto auto;
+      gap: 5px 16px;
+      align-items: center;
+      padding: 14px 14px 14px 16px;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius-lg);
+      margin-bottom: 10px;
+      background: var(--surface);
+      transition: background 0.12s;
+    }
+    .bet-card:hover { background: var(--surface2); }
+    .bet-matchup {
+      font-size: 14px; font-weight: 600; color: var(--text);
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      grid-column: 1; grid-row: 1;
+    }
+    .bet-away { color: var(--muted); font-weight: 400; }
+    .bet-vs   { font-size: 11px; color: var(--muted); font-weight: 400; }
+    .bet-meta {
+      display: flex; gap: 10px; font-size: 12px; color: var(--muted);
+      font-family: var(--mono); flex-wrap: wrap; align-items: center;
+      grid-column: 1; grid-row: 2;
+    }
+    .bet-right {
+      grid-column: 2; grid-row: 1 / 3;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 5px;
+    }
+    .bet-league { font-size: 11px; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+    .bet-diff {
+      display: inline-block; padding: 2px 8px;
+      background: rgba(200,240,74,0.12); border: 1px solid rgba(200,240,74,0.25);
+      border-radius: 20px; font-size: 11px; font-family: var(--mono); color: var(--accent);
+      white-space: nowrap;
+    }
+    .bet-dots { display: flex; gap: 3px; align-items: center; }
+
+    /* Status / error */
+    .status {
+      padding: 2rem 0; color: var(--muted); font-size: 13px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--border2); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error {
+      padding: 1rem; border: 1px solid rgba(248,113,113,0.3);
+      border-radius: var(--radius-lg); color: var(--loss);
+      font-size: 13px; background: rgba(248,113,113,0.05);
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 1rem 2rem; font-size: 11px; color: var(--muted);
+      font-family: var(--mono); display: flex;
+      justify-content: space-between; flex-wrap: wrap; gap: 4px;
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      header { padding: 1rem; }
+      .container { padding: 1rem 1rem 3rem; }
+      footer { padding: 1rem; }
+      .col-team { width: 120px; }
+      .col-wdl  { display: none; }
+      .bet-right { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .spinner { animation: none; opacity: 0.5; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Football Form Table</h1>
+  <span>Last 8 matches · Top 5 European leagues</span>
+</header>
+
+<main class="container">
+
+  <!-- Top-level view switcher -->
+  <nav class="view-nav">
+    <button class="view-tab active" id="nav-leagues" onclick="showView('leagues')">League Tables</button>
+    <button class="view-tab"        id="nav-bets"    onclick="showView('bets')">⚡ Best Bets</button>
+    <label class="toggle-wrap" id="testing-toggle" title="Testing mode">
+      <span>Testing</span>
+      <div class="toggle-track" id="testing-track">
+        <div class="toggle-thumb"></div>
+      </div>
+    </label>
+    <div class="testing-date-wrap" id="testing-date-wrap" style="display:none">
+      <label for="testing-date">Date</label>
+      <input type="date" id="testing-date" />
+    </div>
+  </nav>
+
+  <!-- League Tables view -->
+  <div id="view-leagues">
+    <div class="tabs" id="tabs"></div>
+    <div class="form-key">
+      <span class="form-key-item"><span class="dot dot-w"></span> Win</span>
+      <span class="form-key-item"><span class="dot dot-d"></span> Draw</span>
+      <span class="form-key-item"><span class="dot dot-l"></span> Loss</span>
+      <span style="margin-left:4px">· Sorted by form points (last 8)</span>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div id="content">
+      <div class="status"><span class="spinner"></span> Loading data…</div>
+    </div>
+  </div>
+
+  <!-- Best Bets view -->
+  <div id="view-bets" style="display:none">
+    <p class="bets-header">
+      Teams in the <strong style="color:var(--text)">top 3</strong> of their league form table (last 8),
+      whose next fixture is against a team in the <strong style="color:var(--text)">bottom 3</strong> of that table.
+      <span style="color:#4ade80;font-weight:600">&#9632; Home</span> &nbsp;&middot;&nbsp;
+      <span style="color:#60a5fa;font-weight:600">&#9632; Away</span> &nbsp;&middot;&nbsp;
+      Sorted by form points gap, highest first.
+    </p>
+    <div id="bets-content">
+      <div class="status"><span class="spinner"></span> Loading all leagues…</div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <span>Data: football-data.org</span>
+  <span id="last-updated"></span>
+</footer>
+
+<script>
+const BASE = 'https://football-proxy.bensturgess83.workers.dev';
+
+const LEAGUE_GROUPS = [
+  {
+    label: 'England',
+    leagues: [
+      { code: 'PL',  label: 'Premier League' },
+      { code: 'ELC', label: 'Championship'   },
+    ],
+  },
+  {
+    label: 'Europe',
+    leagues: [
+      { code: 'PD',  label: 'La Liga'           },
+      { code: 'BL1', label: 'Bundesliga'        },
+      { code: 'SA',  label: 'Serie A'           },
+      { code: 'FL1', label: 'Ligue 1'           },
+      { code: 'DED', label: 'Eredivisie'        },
+      { code: 'PPL', label: 'Primeira Liga'     },
+      { code: 'CL',  label: 'Champions League' },
+    ],
+  },
+];
+
+const LEAGUES = LEAGUE_GROUPS.flatMap(g => g.leagues);
+
+const PAIR_COLORS = [
+  { bg: 'rgba(199,232,255,0.18)', border: 'rgba(199,232,255,0.35)', text: '#9ecff5' },
+  { bg: 'rgba(212,247,224,0.18)', border: 'rgba(212,247,224,0.35)', text: '#7de0a8' },
+  { bg: 'rgba(252,232,208,0.18)', border: 'rgba(252,232,208,0.35)', text: '#f0b97a' },
+  { bg: 'rgba(240,216,251,0.18)', border: 'rgba(240,216,251,0.35)', text: '#d098f0' },
+  { bg: 'rgba(255,214,214,0.18)', border: 'rgba(255,214,214,0.35)', text: '#f09090' },
+  { bg: 'rgba(213,245,240,0.18)', border: 'rgba(213,245,240,0.35)', text: '#6edcc8' },
+  { bg: 'rgba(255,243,196,0.18)', border: 'rgba(255,243,196,0.35)', text: '#e6c85a' },
+  { bg: 'rgba(252,220,233,0.18)', border: 'rgba(252,220,233,0.35)', text: '#f0a0c0' },
+  { bg: 'rgba(220,232,252,0.18)', border: 'rgba(220,232,252,0.35)', text: '#94b8e8' },
+  { bg: 'rgba(232,244,208,0.18)', border: 'rgba(232,244,208,0.35)', text: '#a8d460' },
+];
+
+let currentLeague = 'PL';
+let currentView   = 'leagues';
+const cache = {};
+
+async function apiFetch(path) {
+  const res = await fetch(BASE + path);
+  if (!res.ok) throw new Error(`API returned ${res.status} for ${path}`);
+  return res.json();
+}
+
+// Returns the current as-of date: either the testing date or today
+function getAsOfDate() {
+  if (testingMode) {
+    const val = document.getElementById('testing-date').value;
+    if (val) return new Date(val + 'T23:59:59');
+  }
+  return new Date();
+}
+
+// Raw match data cache (separate from processed cache so we can reprocess for different dates)
+const rawCache = {};
+
+async function fetchRaw(code) {
+  if (rawCache[code]) return rawCache[code];
+  const [standData, allMatchData] = await Promise.all([
+    apiFetch(`/competitions/${code}/standings`),
+    apiFetch(`/competitions/${code}/matches?limit=380`),
+  ]);
+  rawCache[code] = { standData, allMatchData };
+  return rawCache[code];
+}
+
+async function loadLeague(code, asOfDate) {
+  const asOf    = asOfDate || getAsOfDate();
+  const cacheKey = code + '_' + asOf.toISOString().slice(0, 10);
+  if (cache[cacheKey]) return cache[cacheKey];
+
+  const { standData, allMatchData } = await fetchRaw(code);
+
+  const teams = standData.standings[0].table.map(row => ({
+    id:      row.team.id,
+    name:    row.team.shortName || row.team.name,
+    pts:     row.points,
+    played:  row.playedGames,
+    results: [],
+    formPts: 0,
+    formW:   0,
+    formD:   0,
+    formL:   0,
+  }));
+
+  const teamMap = Object.fromEntries(teams.map(t => [t.id, t]));
+  const allMatches = allMatchData.matches || [];
+
+  // Matches completed before asOf — used for form
+  const finished = allMatches
+    .filter(m => m.status === 'FINISHED' && new Date(m.utcDate) <= asOf)
+    .sort((a, b) => new Date(b.utcDate) - new Date(a.utcDate));
+
+  for (const m of finished) {
+    const h  = teamMap[m.homeTeam.id];
+    const a  = teamMap[m.awayTeam.id];
+    const hg = m.score?.fullTime?.home;
+    const ag = m.score?.fullTime?.away;
+    if (!h || !a || hg === null || hg === undefined) continue;
+    if (h.results.length < 8) h.results.push(hg > ag ? 'W' : hg < ag ? 'L' : 'D');
+    if (a.results.length < 8) a.results.push(ag > hg ? 'W' : ag < hg ? 'L' : 'D');
+  }
+
+  for (const t of teams) {
+    for (const r of t.results) {
+      if (r === 'W') { t.formPts += 3; t.formW++; }
+      else if (r === 'D') { t.formPts += 1; t.formD++; }
+      else t.formL++;
+    }
+  }
+
+  // Next fixture for each team: first match after asOf (any status — may now be finished)
+  const upcoming = allMatches
+    .filter(m => new Date(m.utcDate) > asOf)
+    .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
+
+  // Build a lookup of finished results by team pair
+  const resultByPair = {};
+  for (const m of allMatches) {
+    if (m.status !== 'FINISHED') continue;
+    const hg = m.score?.fullTime?.home;
+    const ag = m.score?.fullTime?.away;
+    if (hg === null || hg === undefined) continue;
+    const key = [m.homeTeam.id, m.awayTeam.id].join('-');
+    resultByPair[key] = { hg, ag, homeId: m.homeTeam.id, awayId: m.awayTeam.id };
+  }
+
+  const nextRound = {};
+  const seen = new Set();
+  for (const m of upcoming) {
+    const hid = m.homeTeam.id, aid = m.awayTeam.id;
+    if (seen.has(hid) || seen.has(aid)) continue;
+    if (teamMap[hid] && teamMap[aid]) {
+      // Check if this match has since been played (status FINISHED)
+      const resultKey = [hid, aid].join('-');
+      const result = m.status === 'FINISHED' ? resultByPair[resultKey] : null;
+      const entry = { opp: aid, home: true,  date: m.utcDate, result };
+      nextRound[hid] = entry;
+      nextRound[aid] = { opp: hid, home: false, date: m.utcDate, result };
+      seen.add(hid); seen.add(aid);
+    }
+  }
+
+  const data = { teams, teamMap, nextRound, fetched: new Date(), asOf };
+  cache[cacheKey] = data;
+  // Also store under plain code key for non-testing access
+  if (!asOfDate) cache[code] = data;
+  return data;
+}
+
+/* ── Result HTML helper ── */
+function resultHtml(fix, teamId, teamMap) {
+  if (!fix || !fix.result) return '';
+  const r   = fix.result;
+  const hg  = r.hg, ag = r.ag;
+  const isHome = fix.home;
+  const myScore  = isHome ? hg : ag;
+  const oppScore = isHome ? ag : hg;
+  let winnerHtml;
+  if (hg > ag) {
+    const winnerName = teamMap[r.homeId]?.name || '';
+    winnerHtml = isHome
+      ? `<span class="fix-result-winner">W</span>`
+      : `<span class="fix-result-draw">L</span>`;
+  } else if (ag > hg) {
+    winnerHtml = isHome
+      ? `<span class="fix-result-draw">L</span>`
+      : `<span class="fix-result-winner">W</span>`;
+  } else {
+    winnerHtml = `<span class="fix-result-draw">D</span>`;
+  }
+  return `<span class="fix-result">
+    ${winnerHtml}
+    <span class="fix-result-score">${hg} – ${ag}</span>
+  </span>`;
+}
+
+/* ── League table renderer ── */
+function render(code, data) {
+  const { teams, teamMap, nextRound } = data;
+  const sorted = [...teams].sort((a, b) => b.formPts - a.formPts || b.pts - a.pts);
+
+  const pairColor  = {};
+  const legendPairs = [];
+  const usedPairs  = new Set();
+  let ci = 0;
+  for (const [tidStr, fix] of Object.entries(nextRound)) {
+    const tid = +tidStr;
+    const key = [tid, fix.opp].sort().join('-');
+    if (usedPairs.has(key)) continue;
+    usedPairs.add(key);
+    const c = PAIR_COLORS[ci % PAIR_COLORS.length];
+    pairColor[tid]     = c;
+    pairColor[fix.opp] = c;
+    const t1 = teamMap[tid], t2 = teamMap[fix.opp];
+    if (t1 && t2) legendPairs.push({ label: `${t1.name} v ${t2.name}`, c });
+    ci++;
+  }
+
+  document.getElementById('legend').innerHTML = legendPairs.map(({ label, c }) =>
+    `<span class="legend-item"><span class="swatch" style="background:${c.text}"></span>${label}</span>`
+  ).join('');
+
+  const rows = sorted.map((t, i) => {
+    const dots = [...t.results].reverse().map(r => {
+      const cls   = r === 'W' ? 'dot-w' : r === 'D' ? 'dot-d' : 'dot-l';
+      const label = r === 'W' ? 'Win'   : r === 'D' ? 'Draw'  : 'Loss';
+      return `<span class="dot ${cls}" title="${label}"></span>`;
+    }).join('');
+
+    let badge = '<span style="color:var(--muted)">—</span>';
+    const fix = nextRound[t.id];
+    const c   = pairColor[t.id];
+    if (fix && c) {
+      const opp     = teamMap[fix.opp];
+      const ha      = fix.home ? 'H' : 'A';
+      const dateStr = new Date(fix.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      const resHtml = resultHtml(fix, t.id, teamMap);
+      if (opp) badge = `<span class="fix-badge" style="background:${c.bg};border-color:${c.border};color:${c.text}">
+        <span class="fix-ha">${ha}</span>${opp.name}<span class="fix-ha">· ${dateStr}</span>
+      </span>${resHtml ? ' ' + resHtml : ''}`;
+    }
+
+    const rankStyle = c
+      ? `style="border-left:3px solid ${c.text};background:${c.bg}"`
+      : `style="border-left:3px solid transparent"`;
+    const teamStyle = c ? `style="background:${c.bg}"` : '';
+
+    return `<tr>
+      <td class="col-rank" ${rankStyle}><span class="rank">${i + 1}</span></td>
+      <td class="col-team" ${teamStyle}><span class="team-name">${t.name}</span></td>
+      <td class="col-pts r"><span class="pts-val">${t.formPts}</span></td>
+      <td class="col-wdl r"><span class="wdl-val">${t.formW}</span></td>
+      <td class="col-wdl r"><span class="wdl-val">${t.formD}</span></td>
+      <td class="col-wdl r"><span class="wdl-val">${t.formL}</span></td>
+      <td class="col-form"><div class="dots">${dots || '<span style="color:var(--muted);font-size:11px">no data</span>'}</div></td>
+      <td class="col-fix">${badge}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('content').innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th class="col-rank">#</th>
+          <th class="col-team">Team</th>
+          <th class="col-pts r" title="Form points from last 8 matches">Pts</th>
+          <th class="col-wdl r">W</th>
+          <th class="col-wdl r">D</th>
+          <th class="col-wdl r">L</th>
+          <th class="col-form">Last 8</th>
+          <th class="col-fix">Next fixture</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  const asOfLabel = testingMode
+    ? ' · As of ' + data.asOf.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    : '';
+  document.getElementById('last-updated').textContent =
+    'Updated ' + data.fetched.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + asOfLabel;
+}
+
+/* ── Best Bets renderer ── */
+function renderBets(allLeagueData) {
+  const bets = [];
+
+  for (const { code, label, data } of allLeagueData) {
+    if (!data) continue;
+    const { teams, teamMap, nextRound } = data;
+
+    // Sort by form, best first
+    const sorted = [...teams].sort((a, b) => b.formPts - a.formPts || b.pts - a.pts);
+    const n = sorted.length;
+    if (n < 6) continue;
+
+    const top3Set    = new Set(sorted.slice(0, 3).map(t => t.id));
+    const bottom3Set = new Set(sorted.slice(n - 3).map(t => t.id));
+    const top3       = sorted.slice(0, 3);
+
+    for (const qualTeam of top3) {
+      const fix = nextRound[qualTeam.id];
+      if (!fix) continue;
+      if (!bottom3Set.has(fix.opp)) continue; // opponent must be bottom 3
+
+      const opponent = teamMap[fix.opp];
+      if (!opponent) continue;
+
+      const isHome    = fix.home;
+      const qualRank  = sorted.findIndex(t => t.id === qualTeam.id) + 1;
+      const oppRank   = sorted.findIndex(t => t.id === opponent.id) + 1;
+      const ptsDiff   = qualTeam.formPts - opponent.formPts;
+      const dateStr   = new Date(fix.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+      const dots = [...qualTeam.results].reverse().map(r => {
+        const cls = r === 'W' ? 'dot-w' : r === 'D' ? 'dot-d' : 'dot-l';
+        return `<span class="dot ${cls}" title="${r}"></span>`;
+      }).join('');
+
+      // homeTeam/awayTeam for display — qualTeam may be either
+      const homeTeam = isHome ? qualTeam : opponent;
+      const awayTeam = isHome ? opponent : qualTeam;
+
+      bets.push({ qualTeam, opponent, homeTeam, awayTeam, isHome, qualRank, oppRank, ptsDiff, dateStr, dots, leagueLabel: label, code, fix, teamMap });
+    }
+  }
+
+  // Sort by points difference descending
+  bets.sort((a, b) => b.ptsDiff - a.ptsDiff);
+
+  const el = document.getElementById('bets-content');
+
+  if (bets.length === 0) {
+    el.innerHTML = '<p class="bets-empty">No matches found right now — check back closer to the next round of fixtures.</p>';
+    return;
+  }
+
+  el.innerHTML = bets.map(b => {
+    // Green for home team name, blue for away team name
+    const homeNameHtml = b.isHome
+      ? `<span style="color:#4ade80;font-weight:600">${b.homeTeam.name}</span>`
+      : `<span style="color:var(--muted);font-weight:400">${b.homeTeam.name}</span>`;
+    const awayNameHtml = b.isHome
+      ? `<span style="color:var(--muted);font-weight:400">${b.awayTeam.name}</span>`
+      : `<span style="color:#60a5fa;font-weight:600">${b.awayTeam.name}</span>`;
+    const haLabel = b.isHome
+      ? `<span style="color:#4ade80;font-size:11px;font-family:var(--mono)">HOME</span>`
+      : `<span style="color:#60a5fa;font-size:11px;font-family:var(--mono)">AWAY</span>`;
+    const borderColor = b.isHome ? '#4ade80' : '#60a5fa';
+
+    return `
+    <div class="bet-card" style="border-left-color:${borderColor}">
+      <div class="bet-matchup">
+        ${haLabel}
+        ${homeNameHtml}
+        <span class="bet-vs">vs</span>
+        ${awayNameHtml}
+      </div>
+      <div class="bet-meta">
+        <span>Form rank: #${b.qualRank} vs #${b.oppRank}</span>
+        <span class="bet-dots">${b.dots}</span>
+        <span>· ${b.dateStr}</span>
+        ${resultHtml(b.fix, b.qualTeam.id, b.teamMap) || ''}
+      </div>
+      <div class="bet-right">
+        <span class="bet-league">${b.leagueLabel}</span>
+        <span class="bet-diff">+${b.ptsDiff} pts gap</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('last-updated').textContent =
+    'Updated ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+/* ── View switcher ── */
+let testingMode = false;
+
+window.showView = function(view) {
+  currentView = view;
+  document.getElementById('view-leagues').style.display = view === 'leagues' ? '' : 'none';
+  document.getElementById('view-bets').style.display    = view === 'bets'    ? '' : 'none';
+  document.getElementById('nav-leagues').classList.toggle('active', view === 'leagues');
+  document.getElementById('nav-bets').classList.toggle('active',    view === 'bets');
+
+
+  if (view === 'bets') loadBets();
+};
+
+// Set date picker default to today
+document.getElementById('testing-date').value = new Date().toISOString().slice(0, 10);
+
+document.getElementById('testing-toggle').addEventListener('click', function() {
+  testingMode = !testingMode;
+  document.getElementById('testing-track').classList.toggle('on', testingMode);
+  document.getElementById('testing-date-wrap').style.display = testingMode ? '' : 'none';
+  // Clear processed cache so switching in/out of testing mode recalculates
+  Object.keys(cache).forEach(k => delete cache[k]);
+  if (currentView === 'bets') loadBets();
+  else switchLeague(currentLeague);
+});
+
+document.getElementById('testing-date').addEventListener('change', function() {
+  // Clear processed cache so new date is recalculated (raw data is reused)
+  Object.keys(cache).forEach(k => delete cache[k]);
+  if (currentView === 'bets') loadBets();
+  else switchLeague(currentLeague);
+});
+
+async function loadBets() {
+  const el = document.getElementById('bets-content');
+  el.innerHTML = '<div class="status"><span class="spinner"></span> Loading all leagues…</div>';
+
+  const asOf     = getAsOfDate();
+  const cacheKey = (code) => code + '_' + asOf.toISOString().slice(0, 10);
+
+  const results = [];
+  for (const { code, label } of LEAGUES) {
+    try {
+      if (!cache[cacheKey(code)]) await new Promise(r => setTimeout(r, 200));
+      const data = await loadLeague(code, asOf);
+      results.push({ code, label, data });
+    } catch {
+      results.push({ code, label, data: null });
+    }
+  }
+
+  renderBets(results);
+}
+
+/* ── League switcher ── */
+async function switchLeague(code) {
+  currentLeague = code;
+  document.querySelectorAll('.tab-group-btns .tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.code === code)
+  );
+  const asOf     = getAsOfDate();
+  const cacheKey = code + '_' + asOf.toISOString().slice(0, 10);
+  if (!cache[cacheKey]) {
+    document.getElementById('content').innerHTML =
+      '<div class="status"><span class="spinner"></span> Loading data…</div>';
+  }
+  try {
+    const data = await loadLeague(code, asOf);
+    render(code, data);
+  } catch (e) {
+    document.getElementById('content').innerHTML =
+      `<div class="error">
+        <strong>Couldn't load data.</strong><br>${e.message}<br><br>
+        Check your API key or try again — free tier allows 10 requests/min.
+       </div>`;
+  }
+}
+
+/* ── Build league tabs ── */
+const tabsEl = document.getElementById('tabs');
+LEAGUE_GROUPS.forEach(group => {
+  const groupWrap = document.createElement('div');
+  groupWrap.className = 'tab-group';
+
+  const groupLabel = document.createElement('span');
+  groupLabel.className = 'tab-group-label';
+  groupLabel.textContent = group.label;
+  groupWrap.appendChild(groupLabel);
+
+  const groupBtns = document.createElement('div');
+  groupBtns.className = 'tab-group-btns';
+  group.leagues.forEach(l => {
+    const btn = document.createElement('button');
+    btn.className    = 'tab' + (l.code === currentLeague ? ' active' : '');
+    btn.textContent  = l.label;
+    btn.dataset.code = l.code;
+    btn.setAttribute('aria-label', `Show ${l.label} form table`);
+    btn.onclick = () => switchLeague(l.code);
+    groupBtns.appendChild(btn);
+  });
+  groupWrap.appendChild(groupBtns);
+  tabsEl.appendChild(groupWrap);
+});
+
+switchLeague(currentLeague);
+</script>
+</body>
+</html>
