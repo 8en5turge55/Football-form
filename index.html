@@ -79,10 +79,30 @@
     .view-tab:hover { color: var(--text); }
     .view-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
+    /* Form window dropdown */
+    .form-window-wrap {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 12px; color: var(--muted); font-family: var(--mono);
+    }
+    #form-window-select {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 3px 7px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    #form-window-select:hover,
+    #form-window-select:focus { border-color: var(--accent); }
+
     /* Testing toggle */
     .toggle-wrap {
       display: flex; align-items: center; gap: 8px;
-      margin-left: auto; padding: 0 0 1px 16px;
+      margin-left: 0; padding: 0 0 1px 0;
       font-size: 12px; color: var(--muted); font-family: var(--mono);
       cursor: pointer; user-select: none;
     }
@@ -331,7 +351,7 @@
 
 <header>
   <h1>Football Form Table</h1>
-  <span>Last 8 matches · Top 5 European leagues</span>
+  
 </header>
 
 <main class="container">
@@ -340,6 +360,14 @@
   <nav class="view-nav">
     <button class="view-tab active" id="nav-leagues" onclick="showView('leagues')">League Tables</button>
     <button class="view-tab"        id="nav-bets"    onclick="showView('bets')">⚡ Best Bets</button>
+    <div class="form-window-wrap" style="margin-left:auto;margin-right:12px">
+      <label for="form-window-select">Form</label>
+      <select id="form-window-select">
+        <option value="8">Last 8</option>
+        <option value="6">Last 6</option>
+        <option value="4">Last 4</option>
+      </select>
+    </div>
     <label class="toggle-wrap" id="testing-toggle" title="Testing mode">
       <span>Test Mode</span>
       <div class="toggle-track" id="testing-track">
@@ -360,7 +388,7 @@
       <span class="form-key-item"><span class="dot dot-w"></span> Win</span>
       <span class="form-key-item"><span class="dot dot-d"></span> Draw</span>
       <span class="form-key-item"><span class="dot dot-l"></span> Loss</span>
-      <span style="margin-left:4px">· Sorted by form points (last 8)</span>
+      <span style="margin-left:4px" id="form-key-label">· Sorted by form points (last 8)</span>
     </div>
     <div class="legend" id="legend"></div>
     <div id="content">
@@ -371,7 +399,7 @@
   <!-- Best Bets view -->
   <div id="view-bets" style="display:none">
     <p class="bets-header">
-      Teams in the <strong style="color:var(--text)">top 3</strong> of their league form table (last 8),
+      Teams in the <strong style="color:var(--text)">top 3</strong> of their league form table (<span id="bets-form-label">last 8</span>),
       whose next fixture is against a team in the <strong style="color:var(--text)">bottom 3</strong> of that table.
       <span style="color:#4ade80;font-weight:600">&#9632; Home</span> &nbsp;&middot;&nbsp;
       <span style="color:#60a5fa;font-weight:600">&#9632; Away</span> &nbsp;&middot;&nbsp;
@@ -387,7 +415,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.26</span>
+  <span style="color:var(--border2)">v1.28</span>
 </footer>
 
 <script>
@@ -412,6 +440,12 @@ const LEAGUE_GROUPS = [
       { code: 'PPL', label: 'Primeira Liga' },
     ],
   },
+  {
+    label: 'South America',
+    leagues: [
+      { code: 'BSA', label: 'Brasileirão'   },
+    ],
+  },
 ];
 
 const LEAGUES = LEAGUE_GROUPS.flatMap(g => g.leagues);
@@ -431,6 +465,7 @@ const PAIR_COLORS = [
 
 let currentLeague = 'PL';
 let currentView   = 'leagues';
+let formWindow    = 8; // number of matches to consider for form
 const cache = {};
 
 async function apiFetch(path) {
@@ -464,42 +499,38 @@ function seasonYearForDate(date) {
 }
 
 async function fetchRaw(code, asOf) {
-  // Cache key includes the season so test mode dates get the right season's data
   const season   = seasonYearForDate(asOf);
   const cacheKey = code + '_s' + season;
   if (rawCache[cacheKey]) return rawCache[cacheKey];
 
-  // Try the derived season first, then adjacent seasons as fallback
+  // Always fetch the derived season — don't fall back, even if no finished matches yet.
+  // In pre-season (e.g. July) the new season has only scheduled matches; that's correct.
+  // For test mode with a historical date, the derived season will have finished matches.
   let standData, allMatchData;
-  for (const yr of [season, season - 1, season + 1]) {
-    let sd, md;
+  try {
+    [standData, allMatchData] = await Promise.all([
+      apiFetch(`/competitions/${code}/standings?season=${season}`),
+      apiFetch(`/competitions/${code}/matches?season=${season}`),
+    ]);
+  } catch(e) {
+    // If the season isn't available yet, try the previous one as a last resort
     try {
-      [sd, md] = await Promise.all([
-        apiFetch(`/competitions/${code}/standings?season=${yr}`),
-        apiFetch(`/competitions/${code}/matches?season=${yr}`),
+      [standData, allMatchData] = await Promise.all([
+        apiFetch(`/competitions/${code}/standings?season=${season - 1}`),
+        apiFetch(`/competitions/${code}/matches?season=${season - 1}`),
       ]);
-    } catch(e) {
-      continue;
+    } catch(e2) {
+      throw new Error(`Could not load data for ${code}: ${e2.message}`);
     }
-    const matches    = md.matches || [];
-    const nFinished  = matches.filter(m => m.status === 'FINISHED').length;
-    const nScheduled = matches.filter(m => m.status !== 'FINISHED').length;
-    // Accept this season if it has finished matches OR if it's the only option
-    if (nFinished > 0 || nScheduled > 0) {
-      standData    = sd;
-      allMatchData = md;
-      // Prefer a season with finished matches; keep looking if none yet
-      if (nFinished > 0) break;
-    }
-    if (!standData) { standData = sd; allMatchData = md; }
   }
+
   rawCache[cacheKey] = { standData, allMatchData };
   return rawCache[cacheKey];
 }
 
 async function loadLeague(code, asOfDate) {
   const asOf     = asOfDate instanceof Date ? asOfDate : getAsOfDate();
-  const cacheKey = code + '_' + asOf.toISOString().slice(0, 10);
+  const cacheKey = code + '_' + asOf.toISOString().slice(0, 10) + '_w' + formWindow;
   if (cache[cacheKey]) return cache[cacheKey];
 
   const { standData, allMatchData } = await fetchRaw(code, asOf);
@@ -547,8 +578,8 @@ async function loadLeague(code, asOfDate) {
     else              { h.drawn++; h.pts += 1; a.drawn++; a.pts += 1; }
 
     // Last 8 form (array is already newest-first due to sort)
-    if (h.results.length < 8) h.results.push(hg > ag ? 'W' : hg < ag ? 'L' : 'D');
-    if (a.results.length < 8) a.results.push(ag > hg ? 'W' : ag < hg ? 'L' : 'D');
+    if (h.results.length < formWindow) h.results.push(hg > ag ? 'W' : hg < ag ? 'L' : 'D');
+    if (a.results.length < formWindow) a.results.push(ag > hg ? 'W' : ag < hg ? 'L' : 'D');
   }
 
   for (const t of teams) {
@@ -596,6 +627,14 @@ async function loadLeague(code, asOfDate) {
   return data;
 }
 
+/* ── Update form key label ── */
+function updateFormKeyLabel() {
+  const el = document.getElementById('form-key-label');
+  if (el) el.textContent = `· Sorted by form points (last ${formWindow})`;
+  const col = document.getElementById('form-col-header');
+  if (col) col.textContent = `Last ${formWindow}`;
+}
+
 /* ── Result HTML helper ── */
 function resultHtml(fix, teamId, teamMap) {
   if (!fix || !fix.result) return '';
@@ -625,6 +664,7 @@ function resultHtml(fix, teamId, teamMap) {
 
 /* ── League table renderer ── */
 function render(code, data) {
+  updateFormKeyLabel();
   const { teams, teamMap, nextRound } = data;
   const sorted = [...teams].sort((a, b) => b.formPts - a.formPts || b.pts - a.pts);
 
@@ -705,7 +745,7 @@ function render(code, data) {
           <th class="col-wdl r">W</th>
           <th class="col-wdl r">D</th>
           <th class="col-wdl r">L</th>
-          <th class="col-form">Last 8</th>
+          <th class="col-form" id="form-col-header">Last 8</th>
           <th class="col-fix">Next fixture</th>
         </tr></thead>
         <tbody>${rows}</tbody>
@@ -722,6 +762,8 @@ function render(code, data) {
 /* ── Best Bets renderer ── */
 function renderBets(allLeagueData) {
   const bets = [];
+  const formLabelEl = document.getElementById('bets-form-label');
+  if (formLabelEl) formLabelEl.textContent = `last ${formWindow}`;
 
   for (const { code, label, data } of allLeagueData) {
     if (!data) continue;
@@ -839,6 +881,14 @@ document.getElementById('testing-toggle').addEventListener('click', function() {
   else switchLeague(currentLeague);
 });
 
+document.getElementById('form-window-select').addEventListener('change', function() {
+  formWindow = parseInt(this.value, 10);
+  // Clear processed cache so form is recalculated with new window
+  Object.keys(cache).forEach(k => delete cache[k]);
+  if (currentView === 'bets') loadBets();
+  else switchLeague(currentLeague);
+});
+
 document.getElementById('testing-apply').addEventListener('click', function() {
   // Clear both caches so data is re-fetched and reprocessed for the selected date
   Object.keys(cache).forEach(k => delete cache[k]);
@@ -875,7 +925,7 @@ async function switchLeague(code) {
     t.classList.toggle('active', t.dataset.code === code)
   );
   const asOf     = getAsOfDate();
-  const cacheKey = code + '_' + asOf.toISOString().slice(0, 10);
+  const cacheKey = code + '_' + asOf.toISOString().slice(0, 10) + '_w' + formWindow;
   if (!cache[cacheKey]) {
     document.getElementById('content').innerHTML =
       '<div class="status"><span class="spinner"></span> Loading data…</div>';
