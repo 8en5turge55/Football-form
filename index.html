@@ -387,7 +387,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.24</span>
+  <span style="color:var(--border2)">v1.25</span>
 </footer>
 
 <script>
@@ -457,11 +457,12 @@ function getAsOfDate() {
 const rawCache = {};
 
 // Derive the season start year for a given date.
-// Football seasons start in July/August, so dates before July belong to the previous season year.
+// European seasons typically kick off in August, so any date before August
+// belongs to the season that started the previous year.
 function seasonYearForDate(date) {
   const yr = date.getFullYear();
   const mo = date.getMonth() + 1; // 1-indexed
-  return mo >= 7 ? yr : yr - 1;
+  return mo >= 8 ? yr : yr - 1;
 }
 
 async function fetchRaw(code, asOf) {
