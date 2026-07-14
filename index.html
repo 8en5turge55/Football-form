@@ -387,7 +387,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.25</span>
+  <span style="color:var(--border2)">v1.26</span>
 </footer>
 
 <script>
@@ -404,13 +404,12 @@ const LEAGUE_GROUPS = [
   {
     label: 'Europe',
     leagues: [
-      { code: 'PD',  label: 'La Liga'           },
-      { code: 'BL1', label: 'Bundesliga'        },
-      { code: 'SA',  label: 'Serie A'           },
-      { code: 'FL1', label: 'Ligue 1'           },
-      { code: 'DED', label: 'Eredivisie'        },
-      { code: 'PPL', label: 'Primeira Liga'     },
-      { code: 'CL',  label: 'Champions League' },
+      { code: 'PD',  label: 'La Liga'       },
+      { code: 'BL1', label: 'Bundesliga'    },
+      { code: 'SA',  label: 'Serie A'       },
+      { code: 'FL1', label: 'Ligue 1'       },
+      { code: 'DED', label: 'Eredivisie'    },
+      { code: 'PPL', label: 'Primeira Liga' },
     ],
   },
 ];
@@ -457,12 +456,11 @@ function getAsOfDate() {
 const rawCache = {};
 
 // Derive the season start year for a given date.
-// European seasons typically kick off in August, so any date before August
-// belongs to the season that started the previous year.
+// European seasons typically kick off in late July, so July onwards = new season year.
 function seasonYearForDate(date) {
   const yr = date.getFullYear();
   const mo = date.getMonth() + 1; // 1-indexed
-  return mo >= 8 ? yr : yr - 1;
+  return mo >= 7 ? yr : yr - 1;
 }
 
 async function fetchRaw(code, asOf) {
@@ -630,12 +628,21 @@ function render(code, data) {
   const { teams, teamMap, nextRound } = data;
   const sorted = [...teams].sort((a, b) => b.formPts - a.formPts || b.pts - a.pts);
 
-  const pairColor  = {};
+  const pairColor   = {};
   const legendPairs = [];
-  const usedPairs  = new Set();
+  const usedPairs   = new Set();
   let ci = 0;
+
+  // Only colour top 3 + their opponents, and bottom 3 + their opponents
+  const n        = sorted.length;
+  const top3ids  = new Set(sorted.slice(0, 3).map(t => t.id));
+  const bot3ids  = new Set(sorted.slice(Math.max(0, n - 3)).map(t => t.id));
+  const priority = new Set([...top3ids, ...bot3ids]);
+
+  // First pass: pairs where at least one team is in top3 or bottom3
   for (const [tidStr, fix] of Object.entries(nextRound)) {
     const tid = +tidStr;
+    if (!priority.has(tid)) continue;
     const key = [tid, fix.opp].sort().join('-');
     if (usedPairs.has(key)) continue;
     usedPairs.add(key);
