@@ -387,7 +387,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.22</span>
+  <span style="color:var(--border2)">v1.24</span>
 </footer>
 
 <script>
@@ -456,14 +456,23 @@ function getAsOfDate() {
 // Raw match data cache (separate from processed cache so we can reprocess for different dates)
 const rawCache = {};
 
-async function fetchRaw(code, forceRefresh) {
-  if (rawCache[code] && !forceRefresh) return rawCache[code];
-  // The API rolls over to next season ~30 days before it starts.
-  // Try seasons backwards until we find one with FINISHED matches.
-  const currentYear = new Date().getFullYear();
+// Derive the season start year for a given date.
+// Football seasons start in July/August, so dates before July belong to the previous season year.
+function seasonYearForDate(date) {
+  const yr = date.getFullYear();
+  const mo = date.getMonth() + 1; // 1-indexed
+  return mo >= 7 ? yr : yr - 1;
+}
+
+async function fetchRaw(code, asOf) {
+  // Cache key includes the season so test mode dates get the right season's data
+  const season   = seasonYearForDate(asOf);
+  const cacheKey = code + '_s' + season;
+  if (rawCache[cacheKey]) return rawCache[cacheKey];
+
+  // Try the derived season first, then adjacent seasons as fallback
   let standData, allMatchData;
-  for (const yr of [currentYear - 1, currentYear - 2, currentYear]) {
-    console.log(`[fetchRaw] ${code} trying season=${yr}`);
+  for (const yr of [season, season - 1, season + 1]) {
     let sd, md;
     try {
       [sd, md] = await Promise.all([
@@ -471,30 +480,30 @@ async function fetchRaw(code, forceRefresh) {
         apiFetch(`/competitions/${code}/matches?season=${yr}`),
       ]);
     } catch(e) {
-      console.log(`[fetchRaw] ${code} season=${yr} error:`, e.message);
       continue;
     }
-    const matches = md.matches || [];
-    const nFinished = matches.filter(m => m.status === 'FINISHED').length;
-    console.log(`[fetchRaw] ${code} season=${yr} | total=${matches.length} | finished=${nFinished} | sample=${matches[0] ? matches[0].utcDate + ' ' + matches[0].status : 'none'}`);
-    if (nFinished > 0) {
+    const matches    = md.matches || [];
+    const nFinished  = matches.filter(m => m.status === 'FINISHED').length;
+    const nScheduled = matches.filter(m => m.status !== 'FINISHED').length;
+    // Accept this season if it has finished matches OR if it's the only option
+    if (nFinished > 0 || nScheduled > 0) {
       standData    = sd;
       allMatchData = md;
-      break;
+      // Prefer a season with finished matches; keep looking if none yet
+      if (nFinished > 0) break;
     }
     if (!standData) { standData = sd; allMatchData = md; }
   }
-  rawCache[code] = { standData, allMatchData };
-  return rawCache[code];
+  rawCache[cacheKey] = { standData, allMatchData };
+  return rawCache[cacheKey];
 }
 
 async function loadLeague(code, asOfDate) {
   const asOf     = asOfDate instanceof Date ? asOfDate : getAsOfDate();
   const cacheKey = code + '_' + asOf.toISOString().slice(0, 10);
-  console.log('[loadLeague]', code, 'asOf:', asOf.toISOString(), 'cacheKey:', cacheKey, 'cached:', !!cache[cacheKey]);
   if (cache[cacheKey]) return cache[cacheKey];
 
-  const { standData, allMatchData } = await fetchRaw(code);
+  const { standData, allMatchData } = await fetchRaw(code, asOf);
   const allMatches = allMatchData.matches || [];
 
   // Build team list from standings (for names/ids) but recalculate all stats from match history
@@ -521,8 +530,6 @@ async function loadLeague(code, asOfDate) {
   const finishedBeforeAsOf = allMatches
     .filter(m => m.status === 'FINISHED' && new Date(m.utcDate) <= asOf)
     .sort((a, b) => new Date(b.utcDate) - new Date(a.utcDate));
-
-  console.log('[loadLeague]', code, 'finished matches before asOf:', finishedBeforeAsOf.length);
 
   // Rebuild full season standings from match history
   for (const m of finishedBeforeAsOf) {
@@ -828,7 +835,6 @@ document.getElementById('testing-apply').addEventListener('click', function() {
   // Clear both caches so data is re-fetched and reprocessed for the selected date
   Object.keys(cache).forEach(k => delete cache[k]);
   Object.keys(rawCache).forEach(k => delete rawCache[k]);
-  console.log('[TestMode] Apply clicked. asOf =', getAsOfDate().toISOString());
   if (currentView === 'bets') loadBets();
   else switchLeague(currentLeague);
 });
