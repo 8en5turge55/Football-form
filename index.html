@@ -6,7 +6,7 @@
   <title>Football Form Table</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -23,7 +23,7 @@
       --win:       #4ade80;
       --draw:      #888;
       --loss:      #f87171;
-      --font:      'Inter', system-ui, sans-serif;
+      --font:      'Crimson Pro', Georgia, serif;
       --mono:      'IBM Plex Mono', monospace;
       --radius:    6px;
       --radius-lg: 10px;
@@ -41,7 +41,7 @@
     /* Layout */
     header {
       border-bottom: 1px solid var(--border);
-      padding: 1.25rem 2rem;
+      padding: 0.5rem 2rem;
       display: flex;
       align-items: baseline;
       gap: 1rem;
@@ -52,14 +52,14 @@
     .container {
       max-width: 960px;
       margin: 0 auto;
-      padding: 1.5rem 2rem 4rem;
+      padding: 0.6rem 2rem 4rem;
     }
 
     /* Top-level view nav */
     .view-nav {
       display: flex;
       gap: 0;
-      margin-bottom: 1.75rem;
+      margin-bottom: 0.75rem;
       border-bottom: 1px solid var(--border);
       align-items: center;
     }
@@ -160,16 +160,12 @@
     .tabs {
       display: flex;
       gap: 16px;
-      margin-bottom: 1.5rem;
+      margin-bottom: 0.75rem;
       flex-wrap: wrap;
       align-items: flex-start;
     }
     .tab-group { display: flex; flex-direction: column; gap: 5px; }
-    .tab-group-label {
-      font-size: 10px; font-family: var(--mono);
-      letter-spacing: 0.08em; text-transform: uppercase;
-      color: var(--muted); padding-left: 2px;
-    }
+
     .tab-group-btns { display: flex; gap: 4px; flex-wrap: wrap; }
     .tab {
       padding: 5px 13px;
@@ -208,14 +204,14 @@
     }
     th.r, td.r { text-align: right; }
     td {
-      padding: 9px 10px; border-bottom: 1px solid var(--border);
+      padding: 5px 10px; border-bottom: 1px solid var(--border);
       vertical-align: middle; white-space: nowrap;
       overflow: hidden; text-overflow: ellipsis; max-width: 0;
     }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: var(--surface2); }
 
-    .col-rank { width: 32px; }
+    .col-rank { width: 42px; }
     .col-team { width: 170px; min-width: 130px; }
     .col-pts  { width: 44px; }
     .col-wdl  { width: 36px; }
@@ -258,8 +254,6 @@
     .fix-ha { font-size: 10px; opacity: 0.7; font-weight: 400; }
 
     /* Form key */
-    .form-key { display: flex; gap: 12px; margin-bottom: 1rem; font-size: 11px; color: var(--muted); }
-    .form-key-item { display: flex; align-items: center; gap: 5px; }
 
     /* Best Bets */
     .bets-header {
@@ -359,7 +353,7 @@
   <!-- Top-level view switcher -->
   <nav class="view-nav">
     <button class="view-tab active" id="nav-leagues" onclick="showView('leagues')">League Tables</button>
-    <button class="view-tab"        id="nav-bets"    onclick="showView('bets')">⚡ Best Bets</button>
+    <button class="view-tab"        id="nav-bets"    onclick="showView('bets')">💷 Best Bets</button>
     <div class="form-window-wrap" style="margin-left:auto;margin-right:12px">
       <label for="form-window-select">Form</label>
       <select id="form-window-select">
@@ -384,13 +378,7 @@
   <!-- League Tables view -->
   <div id="view-leagues">
     <div class="tabs" id="tabs"></div>
-    <div class="form-key">
-      <span class="form-key-item"><span class="dot dot-w"></span> Win</span>
-      <span class="form-key-item"><span class="dot dot-d"></span> Draw</span>
-      <span class="form-key-item"><span class="dot dot-l"></span> Loss</span>
-      <span style="margin-left:4px" id="form-key-label">· Sorted by form points (last 8)</span>
-    </div>
-    <div class="legend" id="legend"></div>
+
     <div id="content">
       <div class="status"><span class="spinner"></span> Loading data…</div>
     </div>
@@ -415,7 +403,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.28</span>
+  <span style="color:var(--border2)">v1.33</span>
 </footer>
 
 <script>
@@ -451,16 +439,12 @@ const LEAGUE_GROUPS = [
 const LEAGUES = LEAGUE_GROUPS.flatMap(g => g.leagues);
 
 const PAIR_COLORS = [
-  { bg: 'rgba(199,232,255,0.18)', border: 'rgba(199,232,255,0.35)', text: '#9ecff5' },
-  { bg: 'rgba(212,247,224,0.18)', border: 'rgba(212,247,224,0.35)', text: '#7de0a8' },
-  { bg: 'rgba(252,232,208,0.18)', border: 'rgba(252,232,208,0.35)', text: '#f0b97a' },
-  { bg: 'rgba(240,216,251,0.18)', border: 'rgba(240,216,251,0.35)', text: '#d098f0' },
-  { bg: 'rgba(255,214,214,0.18)', border: 'rgba(255,214,214,0.35)', text: '#f09090' },
-  { bg: 'rgba(213,245,240,0.18)', border: 'rgba(213,245,240,0.35)', text: '#6edcc8' },
-  { bg: 'rgba(255,243,196,0.18)', border: 'rgba(255,243,196,0.35)', text: '#e6c85a' },
-  { bg: 'rgba(252,220,233,0.18)', border: 'rgba(252,220,233,0.35)', text: '#f0a0c0' },
-  { bg: 'rgba(220,232,252,0.18)', border: 'rgba(220,232,252,0.35)', text: '#94b8e8' },
-  { bg: 'rgba(232,244,208,0.18)', border: 'rgba(232,244,208,0.35)', text: '#a8d460' },
+  { bg: 'rgba(255,80,80,0.15)',   border: 'rgba(255,80,80,0.4)',   text: '#ff6b6b' },  // red
+  { bg: 'rgba(80,180,255,0.15)',  border: 'rgba(80,180,255,0.4)',  text: '#4db8ff' },  // sky blue
+  { bg: 'rgba(80,230,140,0.15)',  border: 'rgba(80,230,140,0.4)',  text: '#40d98a' },  // green
+  { bg: 'rgba(255,180,0,0.15)',   border: 'rgba(255,180,0,0.4)',   text: '#ffb800' },  // amber
+  { bg: 'rgba(190,80,255,0.15)',  border: 'rgba(190,80,255,0.4)',  text: '#c44dff' },  // purple
+  { bg: 'rgba(255,140,0,0.15)',   border: 'rgba(255,140,0,0.4)',   text: '#ff8c00' },  // orange
 ];
 
 let currentLeague = 'PL';
@@ -629,8 +613,6 @@ async function loadLeague(code, asOfDate) {
 
 /* ── Update form key label ── */
 function updateFormKeyLabel() {
-  const el = document.getElementById('form-key-label');
-  if (el) el.textContent = `· Sorted by form points (last ${formWindow})`;
   const col = document.getElementById('form-col-header');
   if (col) col.textContent = `Last ${formWindow}`;
 }
@@ -694,9 +676,7 @@ function render(code, data) {
     ci++;
   }
 
-  document.getElementById('legend').innerHTML = legendPairs.map(({ label, c }) =>
-    `<span class="legend-item"><span class="swatch" style="background:${c.text}"></span>${label}</span>`
-  ).join('');
+
 
   const rows = sorted.map((t, i) => {
     const dots = [...t.results].reverse().map(r => {
@@ -948,10 +928,7 @@ LEAGUE_GROUPS.forEach(group => {
   const groupWrap = document.createElement('div');
   groupWrap.className = 'tab-group';
 
-  const groupLabel = document.createElement('span');
-  groupLabel.className = 'tab-group-label';
-  groupLabel.textContent = group.label;
-  groupWrap.appendChild(groupLabel);
+
 
   const groupBtns = document.createElement('div');
   groupBtns.className = 'tab-group-btns';
