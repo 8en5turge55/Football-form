@@ -441,7 +441,7 @@
   <div id="view-bets" style="display:none">
     <p class="bets-header">
       Teams in the <strong style="color:var(--text)">top 3</strong> of their league form table (<span id="bets-form-label">last 8</span>),
-      whose next fixture is as <strong style="color:#4ade80">HOME</strong> or <strong style="color:#60a5fa">AWAY</strong> against a team in the <strong style="color:var(--text)">bottom 3</strong>.
+      whose next fixture is at <strong style="color:#4ade80">HOME</strong> or <strong style="color:#60a5fa">AWAY</strong> against a team in the <strong style="color:var(--text)">bottom 3</strong>.
       Sorted by form points gap, highest first.
     </p>
     <div id="bets-content">
@@ -454,7 +454,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.35</span>
+  <span style="color:var(--border2)">v1.36</span>
 </footer>
 
 <script>
@@ -1022,7 +1022,12 @@ function collectBets(allLeagueData, asOf) {
   for (const { code, label, data } of allLeagueData) {
     if (!data) continue;
     const { teams, teamMap, nextRound } = data;
-    const sorted = [...teams].sort((a, b) => b.formPts - a.formPts || b.pts - a.pts);
+    const allZeroForm = teams.every(t => t.formPts === 0);
+    const sorted = [...teams].sort((a, b) =>
+      allZeroForm
+        ? b.pts - a.pts   // pre-season: fall back to standings order
+        : b.formPts - a.formPts || b.pts - a.pts
+    );
     const n = sorted.length;
     if (n < 6) continue;
     const bottom3Set = new Set(sorted.slice(n - 3).map(t => t.id));
@@ -1033,9 +1038,7 @@ function collectBets(allLeagueData, asOf) {
       if (!bottom3Set.has(fix.opp)) continue;
       const opponent = teamMap[fix.opp];
       if (!opponent) continue;
-      // Only include if fixture is ON the asOf date (within same day)
       const fixDate = new Date(fix.date);
-      const asOfDay = asOf.toISOString().slice(0, 10);
       const fixDay  = fixDate.toISOString().slice(0, 10);
       const isHome  = fix.home;
       const qualRank = sorted.findIndex(t => t.id === qualTeam.id) + 1;
