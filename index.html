@@ -454,7 +454,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.38</span>
+  <span style="color:var(--border2)">v1.39</span>
 </footer>
 
 <script>
@@ -1016,7 +1016,9 @@ async function loadBets() {
       } catch { continue; }
 
       // Get raw matches for this league/season
-      const raw = rawCache[code + '_s' + seasonYearForDate(primeAsOf)];
+      const rawKey = code + '_s' + seasonYearForDate(primeAsOf);
+      const raw = rawCache[rawKey];
+      console.log(`[DateRange] ${code} rawKey=${rawKey} found=${!!raw}`);
       if (!raw) continue;
       const { standData, allMatchData } = raw;
       const allMatches = allMatchData.matches || [];
@@ -1026,6 +1028,8 @@ async function loadBets() {
         const d = new Date(m.utcDate);
         return d >= fromDate && d <= toDate;
       });
+
+      console.log(`[DateRange] ${code} | allMatches=${allMatches.length} | rangeMatches=${rangeMatches.length} | from=${fromDate.toISOString().slice(0,10)} | to=${toDate.toISOString().slice(0,10)} | sample=${allMatches[0]?.utcDate}`);
 
       // For each match in range, recalculate form as-of the day before that match
       for (const m of rangeMatches) {
