@@ -454,7 +454,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.36</span>
+  <span style="color:var(--border2)">v1.38</span>
 </footer>
 
 <script>
@@ -954,12 +954,41 @@ document.getElementById('testing-apply').addEventListener('click', function() {
   loadBets();
 });
 
+function pushRangeBet(betsByDate, m, qualTeam, opponent, isHome, sorted, teamMap, leagueLabel) {
+  const fixDate  = new Date(m.utcDate);
+  const fixDay   = fixDate.toISOString().slice(0, 10);
+  const qualRank = sorted.findIndex(t => t.id === qualTeam.id) + 1;
+  const oppRank  = sorted.findIndex(t => t.id === opponent.id) + 1;
+  const ptsDiff  = qualTeam.formPts - opponent.formPts;
+  const dateStr  = fixDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  const homeTeam = isHome ? qualTeam : opponent;
+  const awayTeam = isHome ? opponent : qualTeam;
+  const dots = [...qualTeam.results].reverse().map(r => {
+    const cls = r === 'W' ? 'dot-w' : r === 'D' ? 'dot-d' : 'dot-l';
+    return `<span class="dot ${cls}" title="${r}"></span>`;
+  }).join('');
+  // Build fix object matching the shape used elsewhere
+  const hg = m.score?.fullTime?.home;
+  const ag = m.score?.fullTime?.away;
+  const result = (m.status === 'FINISHED' && hg !== null && hg !== undefined)
+    ? { hg, ag, homeId: m.homeTeam.id, awayId: m.awayTeam.id }
+    : null;
+  const fix = { date: m.utcDate, home: isHome, opp: opponent.id, result };
+  if (!betsByDate[fixDay]) betsByDate[fixDay] = [];
+  // Avoid duplicates
+  const key = fixDay + qualTeam.id;
+  if (!betsByDate[fixDay].some(b => b._key === key)) {
+    betsByDate[fixDay].push({ qualTeam, opponent, homeTeam, awayTeam, isHome, qualRank, oppRank, ptsDiff, dateStr, fixDay, dots, leagueLabel, fix, teamMap, _key: key });
+  }
+}
+
 async function loadBets() {
   const el = document.getElementById('bets-content');
   el.innerHTML = '<div class="status"><span class="spinner"></span> Loading all leagues…</div>';
 
   if (testingMode) {
-    // Date range mode: iterate day by day and collect best bets
+    // Date range mode: load each league as-of the day BEFORE fromDate (form state at range start),
+    // then find all fixtures within the range where top3 plays bottom3
     const fromVal = document.getElementById('bets-date-from').value;
     const toVal   = document.getElementById('bets-date-to').value;
     if (!fromVal || !toVal) {
@@ -972,30 +1001,90 @@ async function loadBets() {
       el.innerHTML = '<p class="bets-empty">From date must be before To date.</p>';
       return;
     }
-    // Get all unique dates in range
-    const dates = [];
-    const cur = new Date(fromDate);
-    while (cur <= toDate) {
-      dates.push(new Date(cur));
-      cur.setUTCDate(cur.getUTCDate() + 1);
-    }
-    // Load each date's data and collect bets
+
     const betsByDate = {};
-    for (const date of dates) {
-      const dateKey = date.toISOString().slice(0, 10);
-      const asOf    = new Date(date.toISOString().slice(0, 10) + 'T23:59:59Z');
-      const results = [];
-      for (const { code, label } of LEAGUES) {
-        try {
-          if (!cache[code + '_' + dateKey + '_w' + formWindow]) await new Promise(r => setTimeout(r, 100));
-          const data = await loadLeague(code, asOf);
-          results.push({ code, label, data });
-        } catch {
-          results.push({ code, label, data: null });
+
+    // For each league, get raw match data then evaluate each fixture in the range
+    // using the form table as-of the day BEFORE that specific fixture
+    for (const { code, label } of LEAGUES) {
+      // First load to prime the rawCache — use fromDate as a reasonable asOf
+      const primeAsOf = new Date(fromDate.getTime() - 1000);
+      try {
+        if (!cache[code + '_' + primeAsOf.toISOString().slice(0, 10) + '_w' + formWindow])
+          await new Promise(r => setTimeout(r, 150));
+        await loadLeague(code, primeAsOf);
+      } catch { continue; }
+
+      // Get raw matches for this league/season
+      const raw = rawCache[code + '_s' + seasonYearForDate(primeAsOf)];
+      if (!raw) continue;
+      const { standData, allMatchData } = raw;
+      const allMatches = allMatchData.matches || [];
+
+      // Filter matches that fall within the selected date range
+      const rangeMatches = allMatches.filter(m => {
+        const d = new Date(m.utcDate);
+        return d >= fromDate && d <= toDate;
+      });
+
+      // For each match in range, recalculate form as-of the day before that match
+      for (const m of rangeMatches) {
+        const matchDate = new Date(m.utcDate);
+        const dayBefore = new Date(matchDate.getTime() - 24 * 60 * 60 * 1000);
+        dayBefore.setUTCHours(23, 59, 59, 999);
+
+        // Build form table as of dayBefore from raw match history
+        const teams = standData.standings[0].table.map(row => ({
+          id:      row.team.id,
+          name:    row.team.shortName || row.team.name,
+          pts:     0, played: 0, won: 0, drawn: 0, lost: 0,
+          results: [], formPts: 0, formW: 0, formD: 0, formL: 0,
+        }));
+        const teamMap = Object.fromEntries(teams.map(t => [t.id, t]));
+
+        const finishedBefore = allMatches
+          .filter(mx => mx.status === 'FINISHED' && new Date(mx.utcDate) <= dayBefore)
+          .sort((a, b) => new Date(b.utcDate) - new Date(a.utcDate));
+
+        for (const mx of finishedBefore) {
+          const h = teamMap[mx.homeTeam.id], a = teamMap[mx.awayTeam.id];
+          const hg = mx.score?.fullTime?.home, ag = mx.score?.fullTime?.away;
+          if (!h || !a || hg === null || hg === undefined) continue;
+          h.played++; a.played++;
+          if (hg > ag)      { h.won++;   h.pts += 3; a.lost++; }
+          else if (hg < ag) { a.won++;   a.pts += 3; h.lost++; }
+          else              { h.drawn++; h.pts += 1; a.drawn++; a.pts += 1; }
+          if (h.results.length < formWindow) h.results.push(hg > ag ? 'W' : hg < ag ? 'L' : 'D');
+          if (a.results.length < formWindow) a.results.push(ag > hg ? 'W' : ag < hg ? 'L' : 'D');
+        }
+        for (const t of teams) {
+          for (const r of t.results) {
+            if (r === 'W') { t.formPts += 3; t.formW++; }
+            else if (r === 'D') { t.formPts += 1; t.formD++; }
+            else t.formL++;
+          }
+        }
+
+        const allZeroForm = teams.every(t => t.formPts === 0);
+        const sorted = [...teams].sort((a, b) =>
+          allZeroForm ? b.pts - a.pts : b.formPts - a.formPts || b.pts - a.pts
+        );
+        const n = sorted.length;
+        if (n < 6) continue;
+        const top3Set    = new Set(sorted.slice(0, 3).map(t => t.id));
+        const bottom3Set = new Set(sorted.slice(n - 3).map(t => t.id));
+
+        const hid = m.homeTeam.id, aid = m.awayTeam.id;
+        const home = teamMap[hid], away = teamMap[aid];
+        if (!home || !away) continue;
+
+        if (top3Set.has(hid) && bottom3Set.has(aid)) {
+          pushRangeBet(betsByDate, m, home, away, true, sorted, teamMap, label);
+        }
+        if (top3Set.has(aid) && bottom3Set.has(hid)) {
+          pushRangeBet(betsByDate, m, away, home, false, sorted, teamMap, label);
         }
       }
-      const dayBets = collectBets(results, asOf);
-      if (dayBets.length > 0) betsByDate[dateKey] = dayBets;
     }
     renderBetsDateRange(betsByDate, fromDate, toDate);
   } else {
