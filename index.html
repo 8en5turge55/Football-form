@@ -454,7 +454,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.39</span>
+  <span style="color:var(--border2)">v1.44</span>
 </footer>
 
 <script>
@@ -997,7 +997,10 @@ async function loadBets() {
     }
     const fromDate = new Date(fromVal + 'T00:00:00Z');
     const toDate   = new Date(toVal   + 'T23:59:59Z');
-    if (fromDate > toDate) {
+    // Snapshot these immediately before any async calls
+    const fromDateSnap = new Date(fromDate);
+    const toDateSnap   = new Date(toDate);
+    if (fromDateSnap > toDateSnap) {
       el.innerHTML = '<p class="bets-empty">From date must be before To date.</p>';
       return;
     }
@@ -1007,18 +1010,26 @@ async function loadBets() {
     // For each league, get raw match data then evaluate each fixture in the range
     // using the form table as-of the day BEFORE that specific fixture
     for (const { code, label } of LEAGUES) {
-      // First load to prime the rawCache — use fromDate as a reasonable asOf
-      const primeAsOf = new Date(fromDate.getTime() - 1000);
+      // Prime rawCache for both the from and to dates (handles season boundaries + Brazil calendar year)
+      const primeAsOf  = new Date(fromDate.getTime() - 1000);
+      const primeAsOf2 = new Date(toDate);
       try {
         if (!cache[code + '_' + primeAsOf.toISOString().slice(0, 10) + '_w' + formWindow])
           await new Promise(r => setTimeout(r, 150));
         await loadLeague(code, primeAsOf);
-      } catch { continue; }
+      } catch { /* continue anyway, rawCache may still have data */ }
+      try {
+        if (!cache[code + '_' + primeAsOf2.toISOString().slice(0, 10) + '_w' + formWindow])
+          await new Promise(r => setTimeout(r, 150));
+        await loadLeague(code, primeAsOf2);
+      } catch { /* ignore */ }
 
       // Get raw matches for this league/season
-      const rawKey = code + '_s' + seasonYearForDate(primeAsOf);
-      const raw = rawCache[rawKey];
-      console.log(`[DateRange] ${code} rawKey=${rawKey} found=${!!raw}`);
+      // Try multiple season year keys — Brazil uses calendar year, European leagues use summer start
+      const yr = seasonYearForDate(primeAsOf);
+      const raw = rawCache[code + '_s' + yr]
+               || rawCache[code + '_s' + (yr - 1)]
+               || rawCache[code + '_s' + (yr + 1)];
       if (!raw) continue;
       const { standData, allMatchData } = raw;
       const allMatches = allMatchData.matches || [];
@@ -1026,10 +1037,8 @@ async function loadBets() {
       // Filter matches that fall within the selected date range
       const rangeMatches = allMatches.filter(m => {
         const d = new Date(m.utcDate);
-        return d >= fromDate && d <= toDate;
+        return d >= fromDateSnap && d <= toDateSnap;
       });
-
-      console.log(`[DateRange] ${code} | allMatches=${allMatches.length} | rangeMatches=${rangeMatches.length} | from=${fromDate.toISOString().slice(0,10)} | to=${toDate.toISOString().slice(0,10)} | sample=${allMatches[0]?.utcDate}`);
 
       // For each match in range, recalculate form as-of the day before that match
       for (const m of rangeMatches) {
