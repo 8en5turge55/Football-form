@@ -454,7 +454,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.44</span>
+  <span style="color:var(--border2)">v1.45</span>
 </footer>
 
 <script>
@@ -828,7 +828,9 @@ function analyticsHtml(bets) {
   const total = bets.length;
   if (total === 0) return '';
   let winners = 0, homeWins = 0, awayWins = 0;
+  let totalHome = 0, totalAway = 0;
   for (const b of bets) {
+    if (b.isHome) totalHome++; else totalAway++;
     if (!b.fix || !b.fix.result) continue;
     const r = b.fix.result;
     const qualWon = b.isHome ? r.hg > r.ag : r.ag > r.hg;
@@ -837,29 +839,31 @@ function analyticsHtml(bets) {
       if (b.isHome) homeWins++; else awayWins++;
     }
   }
-  const pct = (n) => total > 0 ? Math.round(n / total * 100) : 0;
+  const pct      = (n, d) => d > 0 ? Math.round(n / d * 100) : 0;
+  const withRes  = bets.filter(b => b.fix?.result).length;
   return `
   <div class="bets-analytics">
-    <div class="bets-analytics-title">Analytics</div>
+    <div class="bets-analytics-title">Analytics · ${withRes} of ${total} bets have results</div>
     <div class="bets-analytics-grid">
       <div class="bets-stat">
         <span class="bets-stat-val">${total}</span>
         <span class="bets-stat-label">Total Best Bets</span>
+        <span class="bets-stat-sub">${totalHome} home · ${totalAway} away</span>
       </div>
       <div class="bets-stat">
         <span class="bets-stat-val">${winners}</span>
         <span class="bets-stat-label">Total Winners</span>
-        <span class="bets-stat-sub">${pct(winners)}% of best bets</span>
+        <span class="bets-stat-sub">${pct(winners, withRes)}% of bets with results</span>
       </div>
       <div class="bets-stat">
         <span class="bets-stat-val">${homeWins}</span>
         <span class="bets-stat-label">Home Winners</span>
-        <span class="bets-stat-sub">${pct(homeWins)}% of best bets</span>
+        <span class="bets-stat-sub">${pct(homeWins, totalHome)}% of home best bets</span>
       </div>
       <div class="bets-stat">
         <span class="bets-stat-val">${awayWins}</span>
         <span class="bets-stat-label">Away Winners</span>
-        <span class="bets-stat-sub">${pct(awayWins)}% of best bets</span>
+        <span class="bets-stat-sub">${pct(awayWins, totalAway)}% of away best bets</span>
       </div>
     </div>
   </div>`;
@@ -912,6 +916,8 @@ document.getElementById('bets-date-from').value = todayStr;
 document.getElementById('bets-date-to').value   = todayStr;
 
 window.showView = function(view) {
+  if (view === currentView) return; // already on this tab
+  const prevView = currentView;
   currentView = view;
   document.getElementById('view-leagues').style.display = view === 'leagues' ? '' : 'none';
   document.getElementById('view-bets').style.display    = view === 'bets'    ? '' : 'none';
@@ -921,7 +927,13 @@ window.showView = function(view) {
   document.getElementById('leagues-date-wrap').style.display  = view === 'leagues' ? '' : 'none';
   document.getElementById('testing-toggle').style.display     = view === 'bets'    ? '' : 'none';
   document.getElementById('bets-date-wrap').style.display     = view === 'bets'    ? '' : 'none';
-  if (view === 'bets') loadBets();
+  // Only reload if the content area is empty (first visit) — preserve existing content on return
+  if (view === 'bets') {
+    const betsContent = document.getElementById('bets-content');
+    const isEmpty = !betsContent.innerHTML.trim() || betsContent.querySelector('.status, .bets-empty');
+    if (isEmpty) loadBets();
+  }
+  // League table: already rendered via switchLeague, no reload needed
 };
 
 // Leagues date picker — reload table on change
@@ -1024,12 +1036,9 @@ async function loadBets() {
         await loadLeague(code, primeAsOf2);
       } catch { /* ignore */ }
 
-      // Get raw matches for this league/season
-      // Try multiple season year keys — Brazil uses calendar year, European leagues use summer start
-      const yr = seasonYearForDate(primeAsOf);
-      const raw = rawCache[code + '_s' + yr]
-               || rawCache[code + '_s' + (yr - 1)]
-               || rawCache[code + '_s' + (yr + 1)];
+      // Find the rawCache entry for this league — scan all keys since season year may vary
+      const rawKey = Object.keys(rawCache).find(k => k.startsWith(code + '_s'));
+      const raw    = rawKey ? rawCache[rawKey] : null;
       if (!raw) continue;
       const { standData, allMatchData } = raw;
       const allMatches = allMatchData.matches || [];
