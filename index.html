@@ -454,7 +454,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.49</span>
+  <span style="color:var(--border2)">v1.50</span>
 </footer>
 
 <script>
@@ -1000,11 +1000,11 @@ async function loadBets() {
   let loadedCount = 0;
   let needsFetch = LEAGUES.some(({ code }) => !Object.keys(rawCache).some(k => k.startsWith(code + '_s')));
   const updateProgress = () => {
-    if (needsFetch) {
-      el.innerHTML = `<div class="status"><span class="spinner"></span> Loading leagues… ${loadedCount}/${totalLeagues} (may take ~${Math.ceil((totalLeagues - loadedCount) * 7)}s)</div>`;
-    }
+    el.innerHTML = needsFetch
+      ? `<div class="status"><span class="spinner"></span> Loading leagues… ${loadedCount}/${totalLeagues} (may take ~${Math.ceil((totalLeagues - loadedCount) * 7)}s)</div>`
+      : `<div class="status"><span class="spinner"></span> Calculating…</div>`;
   };
-  if (needsFetch) updateProgress();
+  updateProgress(); // always clear and show spinner before processing
 
   if (testingMode) {
     // Date range mode: load each league as-of the day BEFORE fromDate (form state at range start),
