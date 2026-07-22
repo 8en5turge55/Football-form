@@ -454,7 +454,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.46</span>
+  <span style="color:var(--border2)">v1.48</span>
 </footer>
 
 <script>
@@ -949,7 +949,7 @@ document.getElementById('testing-toggle').addEventListener('click', function() {
   document.getElementById('testing-track').classList.toggle('on', testingMode);
   document.getElementById('bets-test-controls').style.display = testingMode ? '' : 'none';
   Object.keys(cache).forEach(k => delete cache[k]);
-  Object.keys(rawCache).forEach(k => delete rawCache[k]);
+  // Keep rawCache — raw match data doesn't change, avoids re-hitting rate limit
   loadBets();
 });
 
@@ -962,7 +962,7 @@ document.getElementById('form-window-select').addEventListener('change', functio
 
 document.getElementById('testing-apply').addEventListener('click', function() {
   Object.keys(cache).forEach(k => delete cache[k]);
-  Object.keys(rawCache).forEach(k => delete rawCache[k]);
+  // Keep rawCache — raw match data is reused across date range queries
   loadBets();
 });
 
@@ -996,7 +996,12 @@ function pushRangeBet(betsByDate, m, qualTeam, opponent, isHome, sorted, teamMap
 
 async function loadBets() {
   const el = document.getElementById('bets-content');
-  el.innerHTML = '<div class="status"><span class="spinner"></span> Loading all leagues…</div>';
+  const totalLeagues = LEAGUES.length;
+  let loadedCount = 0;
+  const updateProgress = () => {
+    el.innerHTML = `<div class="status"><span class="spinner"></span> Loading leagues… ${loadedCount}/${totalLeagues} (rate-limited, ~7s per league)</div>`;
+  };
+  updateProgress();
 
   if (testingMode) {
     // Date range mode: load each league as-of the day BEFORE fromDate (form state at range start),
@@ -1022,26 +1027,26 @@ async function loadBets() {
     // For each league, get raw match data then evaluate each fixture in the range
     // using the form table as-of the day BEFORE that specific fixture
     for (const { code, label } of LEAGUES) {
-      // Prime rawCache for both the from and to dates (handles season boundaries + Brazil calendar year)
-      const primeAsOf  = new Date(fromDate.getTime() - 1000);
-      const primeAsOf2 = new Date(toDate);
-      try {
-        if (!cache[code + '_' + primeAsOf.toISOString().slice(0, 10) + '_w' + formWindow])
-          await new Promise(r => setTimeout(r, 150));
-        await loadLeague(code, primeAsOf);
-        console.log(`[Prime1] ${code} primeAsOf=${primeAsOf.toISOString().slice(0,10)} rawCacheKeys=${Object.keys(rawCache).filter(k=>k.startsWith(code)).join(',')}`);
-      } catch(e) { console.log(`[Prime1 ERROR] ${code}:`, e.message); }
-      try {
-        if (!cache[code + '_' + primeAsOf2.toISOString().slice(0, 10) + '_w' + formWindow])
-          await new Promise(r => setTimeout(r, 150));
-        await loadLeague(code, primeAsOf2);
-        console.log(`[Prime2] ${code} primeAsOf2=${primeAsOf2.toISOString().slice(0,10)} rawCacheKeys=${Object.keys(rawCache).filter(k=>k.startsWith(code)).join(',')}`);
-      } catch(e) { console.log(`[Prime2 ERROR] ${code}:`, e.message); }
+      // Prime rawCache for this league — only if not already cached
+      // Stagger 7s between leagues to respect 10 req/min rate limit (2 calls per league)
+      const primeAsOf = new Date(fromDate.getTime() - 1000);
+      const rawAlreadyCached = Object.keys(rawCache).some(k => k.startsWith(code + '_s'));
+      if (!rawAlreadyCached) {
+        await new Promise(r => setTimeout(r, 7000));
+        try {
+          await loadLeague(code, primeAsOf);
+        } catch(e) {
+          loadedCount++;
+          updateProgress();
+          continue;
+        }
+      }
+      loadedCount++;
+      updateProgress();
 
       // Find the rawCache entry for this league — scan all keys since season year may vary
       const rawKey = Object.keys(rawCache).find(k => k.startsWith(code + '_s'));
       const raw    = rawKey ? rawCache[rawKey] : null;
-      console.log(`[DateRange] ${code} rawKey=${rawKey} found=${!!raw} allKeys=${Object.keys(rawCache).filter(k=>k.startsWith(code)).join(',')}`);
       if (!raw) continue;
       const { standData, allMatchData } = raw;
       const allMatches = allMatchData.matches || [];
