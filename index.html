@@ -454,7 +454,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.45</span>
+  <span style="color:var(--border2)">v1.46</span>
 </footer>
 
 <script>
@@ -1029,16 +1029,19 @@ async function loadBets() {
         if (!cache[code + '_' + primeAsOf.toISOString().slice(0, 10) + '_w' + formWindow])
           await new Promise(r => setTimeout(r, 150));
         await loadLeague(code, primeAsOf);
-      } catch { /* continue anyway, rawCache may still have data */ }
+        console.log(`[Prime1] ${code} primeAsOf=${primeAsOf.toISOString().slice(0,10)} rawCacheKeys=${Object.keys(rawCache).filter(k=>k.startsWith(code)).join(',')}`);
+      } catch(e) { console.log(`[Prime1 ERROR] ${code}:`, e.message); }
       try {
         if (!cache[code + '_' + primeAsOf2.toISOString().slice(0, 10) + '_w' + formWindow])
           await new Promise(r => setTimeout(r, 150));
         await loadLeague(code, primeAsOf2);
-      } catch { /* ignore */ }
+        console.log(`[Prime2] ${code} primeAsOf2=${primeAsOf2.toISOString().slice(0,10)} rawCacheKeys=${Object.keys(rawCache).filter(k=>k.startsWith(code)).join(',')}`);
+      } catch(e) { console.log(`[Prime2 ERROR] ${code}:`, e.message); }
 
       // Find the rawCache entry for this league — scan all keys since season year may vary
       const rawKey = Object.keys(rawCache).find(k => k.startsWith(code + '_s'));
       const raw    = rawKey ? rawCache[rawKey] : null;
+      console.log(`[DateRange] ${code} rawKey=${rawKey} found=${!!raw} allKeys=${Object.keys(rawCache).filter(k=>k.startsWith(code)).join(',')}`);
       if (!raw) continue;
       const { standData, allMatchData } = raw;
       const allMatches = allMatchData.matches || [];
