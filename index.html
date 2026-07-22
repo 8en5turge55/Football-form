@@ -454,7 +454,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.48</span>
+  <span style="color:var(--border2)">v1.49</span>
 </footer>
 
 <script>
@@ -998,10 +998,13 @@ async function loadBets() {
   const el = document.getElementById('bets-content');
   const totalLeagues = LEAGUES.length;
   let loadedCount = 0;
+  let needsFetch = LEAGUES.some(({ code }) => !Object.keys(rawCache).some(k => k.startsWith(code + '_s')));
   const updateProgress = () => {
-    el.innerHTML = `<div class="status"><span class="spinner"></span> Loading leagues… ${loadedCount}/${totalLeagues} (rate-limited, ~7s per league)</div>`;
+    if (needsFetch) {
+      el.innerHTML = `<div class="status"><span class="spinner"></span> Loading leagues… ${loadedCount}/${totalLeagues} (may take ~${Math.ceil((totalLeagues - loadedCount) * 7)}s)</div>`;
+    }
   };
-  updateProgress();
+  if (needsFetch) updateProgress();
 
   if (testingMode) {
     // Date range mode: load each league as-of the day BEFORE fromDate (form state at range start),
@@ -1037,12 +1040,12 @@ async function loadBets() {
           await loadLeague(code, primeAsOf);
         } catch(e) {
           loadedCount++;
-          updateProgress();
+          if (loadedCount < totalLeagues) updateProgress();
           continue;
         }
       }
       loadedCount++;
-      updateProgress();
+      if (loadedCount < totalLeagues) updateProgress();
 
       // Find the rawCache entry for this league — scan all keys since season year may vary
       const rawKey = Object.keys(rawCache).find(k => k.startsWith(code + '_s'));
