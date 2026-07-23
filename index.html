@@ -454,7 +454,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.52</span>
+  <span style="color:var(--border2)">v1.55</span>
 </footer>
 
 <script>
@@ -503,10 +503,23 @@ let currentView   = 'leagues';
 let formWindow    = 8; // number of matches to consider for form
 const cache = {};
 
+// Global request queue — serialises ALL API calls with 7s minimum gap
+// This is the single source of rate limiting; the Worker just proxies
+let _lastApiCall = 0;
+let _apiQueue = Promise.resolve();
+
 async function apiFetch(path) {
-  const res = await fetch(BASE + path);
-  if (!res.ok) throw new Error(`API returned ${res.status} for ${path}`);
-  return res.json();
+  // Chain onto the global queue so requests never overlap
+  const result = await (_apiQueue = _apiQueue.then(async () => {
+    const now = Date.now();
+    const wait = Math.max(0, _lastApiCall + 7000 - now);
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    _lastApiCall = Date.now();
+    const res = await fetch(BASE + path);
+    if (!res.ok) throw new Error(`API returned ${res.status} for ${path}`);
+    return res.json();
+  }));
+  return result;
 }
 
 // Returns the as-of date for the form tables tab (always from leagues-date picker)
@@ -1001,7 +1014,7 @@ async function loadBets() {
   let needsFetch = LEAGUES.some(({ code }) => !Object.keys(rawCache).some(k => k.startsWith(code + '_s')));
   const updateProgress = () => {
     el.innerHTML = needsFetch
-      ? `<div class="status"><span class="spinner"></span> Loading leagues… ${loadedCount}/${totalLeagues} (may take ~${Math.ceil((totalLeagues - loadedCount) * 7)}s)</div>`
+      ? `<div class="status"><span class="spinner"></span> Loading leagues… ${loadedCount}/${totalLeagues}</div>`
       : `<div class="status"><span class="spinner"></span> Calculating…</div>`;
   };
   updateProgress(); // always clear and show spinner before processing
@@ -1035,7 +1048,6 @@ async function loadBets() {
       const primeAsOf = new Date(fromDate.getTime() - 1000);
       const rawAlreadyCached = Object.keys(rawCache).some(k => k.startsWith(code + '_s'));
       if (!rawAlreadyCached) {
-        await new Promise(r => setTimeout(r, 7000));
         try {
           await loadLeague(code, primeAsOf);
         } catch(e) {
@@ -1127,8 +1139,6 @@ async function loadBets() {
     const results = [];
     for (const { code, label } of LEAGUES) {
       try {
-        const rawCached = Object.keys(rawCache).some(k => k.startsWith(code + '_s'));
-        if (!rawCached) await new Promise(r => setTimeout(r, 7000)); // stagger to respect rate limit
         const data = await loadLeague(code, asOf);
         results.push({ code, label, data });
       } catch {
@@ -1238,12 +1248,11 @@ async function preloadAllLeagues() {
   for (const { code } of LEAGUES) {
     const rawCached = Object.keys(rawCache).some(k => k.startsWith(code + '_s'));
     if (rawCached) continue;
-    await new Promise(r => setTimeout(r, 7000)); // respect 10 req/min
     try { await loadLeague(code, asOf); } catch { /* silent fail */ }
   }
 }
-// Start preloading other leagues after a short delay so initial league renders first
-setTimeout(preloadAllLeagues, 2000);
+// Start preloading after initial league has rendered
+setTimeout(preloadAllLeagues, 3000);
 </script>
 </body>
 </html>
