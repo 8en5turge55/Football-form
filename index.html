@@ -454,7 +454,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.57</span>
+  <span style="color:var(--border2)">v1.58</span>
 </footer>
 
 <script>
@@ -1063,31 +1063,24 @@ async function loadBets() {
       loadedCount++;
       if (loadedCount < totalLeagues) updateProgress();
 
-      // Get the season that covers the FROM date — this is the key season for this range
-      const fromSeason = seasonYearForDate(fromDateSnap);
-      const toSeason   = seasonYearForDate(toDateSnap);
-
-      // Ensure we have raw data for all seasons covered by the range
-      const seasonsNeeded = [...new Set([fromSeason, toSeason])];
+      // Gather ALL cached raw data for this league across all seasons
+      // Use whatever is in rawCache — no additional API calls here
       let allMatches = [];
       let standData  = null;
-      for (const yr of seasonsNeeded) {
-        const rk = code + '_s' + yr;
-        if (!rawCache[rk]) {
-          try { await loadLeague(code, new Date((yr + 1) + '-01-01T00:00:00Z')); } catch { continue; }
-        }
-        if (rawCache[rk]) {
-          if (!standData) standData = rawCache[rk].standData;
-          allMatches = allMatches.concat(rawCache[rk].allMatchData.matches || []);
-        }
-      }
-      // Also check any other cached seasons for this league
-      Object.keys(rawCache).filter(k => k.startsWith(code + '_s')).forEach(rk => {
-        const existing = rawCache[rk].allMatchData.matches || [];
-        const newOnes  = existing.filter(m => !allMatches.some(x => x.id === m.id));
-        allMatches = allMatches.concat(newOnes);
-        if (!standData) standData = rawCache[rk].standData;
-      });
+      const seenMatchIds = new Set();
+      Object.keys(rawCache)
+        .filter(k => k.startsWith(code + '_s'))
+        .sort() // process in season order
+        .forEach(rk => {
+          const rd = rawCache[rk];
+          if (!standData) standData = rd.standData;
+          (rd.allMatchData.matches || []).forEach(m => {
+            if (!seenMatchIds.has(m.id)) {
+              seenMatchIds.add(m.id);
+              allMatches.push(m);
+            }
+          });
+        });
       if (!standData || allMatches.length === 0) continue;
 
       // Filter matches that fall within the selected date range
