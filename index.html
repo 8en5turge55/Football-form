@@ -455,7 +455,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.59</span>
+  <span style="color:var(--border2)">v1.61</span>
 </footer>
 
 <script>
@@ -841,20 +841,39 @@ function betCardHtml(b) {
 function analyticsHtml(bets) {
   const total = bets.length;
   if (total === 0) return '';
-  let winners = 0, homeWins = 0, awayWins = 0;
-  let totalHome = 0, totalAway = 0;
+  const pct = (n, d) => d > 0 ? Math.round(n / d * 100) : 0;
+
+  // Overall stats
+  let winners = 0, homeWins = 0, awayWins = 0, totalHome = 0, totalAway = 0;
+  const byLeague = {};
   for (const b of bets) {
     if (b.isHome) totalHome++; else totalAway++;
-    if (!b.fix || !b.fix.result) continue;
-    const r = b.fix.result;
-    const qualWon = b.isHome ? r.hg > r.ag : r.ag > r.hg;
-    if (qualWon) {
-      winners++;
-      if (b.isHome) homeWins++; else awayWins++;
+    if (!byLeague[b.leagueLabel]) byLeague[b.leagueLabel] = { total: 0, wins: 0, withRes: 0 };
+    byLeague[b.leagueLabel].total++;
+    if (b.fix?.result) {
+      const r = b.fix.result;
+      const qualWon = b.isHome ? r.hg > r.ag : r.ag > r.hg;
+      byLeague[b.leagueLabel].withRes++;
+      if (qualWon) {
+        winners++;
+        byLeague[b.leagueLabel].wins++;
+        if (b.isHome) homeWins++; else awayWins++;
+      }
     }
   }
-  const pct      = (n, d) => d > 0 ? Math.round(n / d * 100) : 0;
-  const withRes  = bets.filter(b => b.fix?.result).length;
+  const withRes = bets.filter(b => b.fix?.result).length;
+
+  // Per-league table rows
+  const leagueRows = Object.entries(byLeague)
+    .sort((a, b) => b[1].wins - a[1].wins)
+    .map(([label, s]) => `
+      <tr>
+        <td style="padding:4px 8px;font-size:12px;color:var(--text)">${label}</td>
+        <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono);color:var(--muted)">${s.total}</td>
+        <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono);color:var(--accent)">${s.wins}</td>
+        <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono);color:var(--muted)">${pct(s.wins, s.withRes)}%</td>
+      </tr>`).join('');
+
   return `
   <div class="bets-analytics">
     <div class="bets-analytics-title">Analytics · ${withRes} of ${total} bets have results</div>
@@ -879,6 +898,19 @@ function analyticsHtml(bets) {
         <span class="bets-stat-label">Away Winners</span>
         <span class="bets-stat-sub">${pct(awayWins, totalAway)}% of away best bets</span>
       </div>
+    </div>
+    <div style="margin-top:14px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="padding:4px 8px;font-size:10px;font-family:var(--mono);text-align:left;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase">League</th>
+            <th style="padding:4px 8px;font-size:10px;font-family:var(--mono);text-align:right;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase">Bets</th>
+            <th style="padding:4px 8px;font-size:10px;font-family:var(--mono);text-align:right;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase">Wins</th>
+            <th style="padding:4px 8px;font-size:10px;font-family:var(--mono);text-align:right;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase">Win %</th>
+          </tr>
+        </thead>
+        <tbody>${leagueRows}</tbody>
+      </table>
     </div>
   </div>`;
 }
@@ -951,9 +983,16 @@ window.showView = function(view) {
 };
 
 // Leagues date picker — reload table on change
-document.getElementById('leagues-date').addEventListener('change', function() {
+document.getElementById('leagues-date').addEventListener('change', async function() {
   Object.keys(cache).forEach(k => delete cache[k]);
-  Object.keys(rawCache).forEach(k => delete rawCache[k]);
+  const selectedAsOf = new Date(this.value + 'T23:59:59Z');
+  const today = new Date();
+  const selectedSeason  = seasonYearForDate(selectedAsOf);
+  const currentSeason   = seasonYearForDate(today);
+  // If selecting a different season, fetch it first
+  if (selectedSeason !== currentSeason) {
+    await ensureSeasonLoaded(selectedAsOf);
+  }
   switchLeague(currentLeague);
 });
 
@@ -981,11 +1020,28 @@ document.getElementById('form-window-select').addEventListener('change', functio
   }
 });
 
-document.getElementById('testing-apply').addEventListener('click', function() {
+document.getElementById('testing-apply').addEventListener('click', async function() {
   Object.keys(cache).forEach(k => delete cache[k]);
-  // Reset the API queue so any pending background preloads don't block this
   _apiQueue = Promise.resolve();
   _lastApiCall = 0;
+  // Ensure seasons for both from and to dates are loaded
+  const fromVal = document.getElementById('bets-date-from').value;
+  const toVal   = document.getElementById('bets-date-to').value;
+  if (fromVal && toVal) {
+    const fromAsOf = new Date(fromVal + 'T23:59:59Z');
+    const toAsOf   = new Date(toVal   + 'T23:59:59Z');
+    const today    = new Date();
+    const seasons  = [...new Set([seasonYearForDate(fromAsOf), seasonYearForDate(toAsOf)])];
+    const currentSeason = seasonYearForDate(today);
+    for (const yr of seasons) {
+      if (yr !== currentSeason) {
+        // Show loading state while fetching missing season
+        document.getElementById('bets-content').innerHTML =
+          `<div class="status"><span class="spinner"></span> Loading season ${yr} data…</div>`;
+        await ensureSeasonLoaded(new Date((yr + 1) + '-01-01T00:00:00Z'));
+      }
+    }
+  }
   loadBets();
 });
 
@@ -1272,6 +1328,7 @@ switchLeague(currentLeague);
 // Pre-warm rawCache for all leagues in the background after initial load
 // so Best Bets loads instantly when user navigates there
 async function preloadAllLeagues() {
+  // Preload current season only — historical seasons are fetched on demand
   const asOf = getLeaguesAsOf();
   for (const { code } of LEAGUES) {
     const rawCached = Object.keys(rawCache).some(k => k.startsWith(code + '_s'));
@@ -1279,8 +1336,22 @@ async function preloadAllLeagues() {
     try { await loadLeague(code, asOf); } catch { /* silent fail */ }
   }
 }
-// Start preloading after initial league has rendered
 setTimeout(preloadAllLeagues, 3000);
+
+// Ensure rawCache has data for a specific season for all leagues
+// Called on demand when a historical date is selected
+async function ensureSeasonLoaded(asOf) {
+  const season = seasonYearForDate(asOf);
+  for (const { code } of LEAGUES) {
+    const cacheKey = code + '_s' + season;
+    if (rawCache[cacheKey]) continue;
+    try {
+      const sd = await apiFetch(`/competitions/${code}/standings?season=${season}`);
+      const md = await apiFetch(`/competitions/${code}/matches?season=${season}`);
+      rawCache[cacheKey] = { standData: sd, allMatchData: md };
+    } catch { /* silent fail */ }
+  }
+}
 </script>
 </body>
 </html>
