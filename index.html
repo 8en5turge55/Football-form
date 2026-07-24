@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Football Form Table</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -454,7 +455,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.58</span>
+  <span style="color:var(--border2)">v1.59</span>
 </footer>
 
 <script>
@@ -971,8 +972,13 @@ document.getElementById('testing-toggle').addEventListener('click', function() {
 document.getElementById('form-window-select').addEventListener('change', function() {
   formWindow = parseInt(this.value, 10);
   Object.keys(cache).forEach(k => delete cache[k]);
-  if (currentView === 'bets') loadBets();
-  else switchLeague(currentLeague);
+  if (currentView === 'bets') {
+    _apiQueue = Promise.resolve(); _lastApiCall = 0;
+    loadBets();
+  } else {
+    switchLeague(currentLeague);
+    setTimeout(preloadAllLeagues, 1000);
+  }
 });
 
 document.getElementById('testing-apply').addEventListener('click', function() {
@@ -1064,13 +1070,17 @@ async function loadBets() {
       if (loadedCount < totalLeagues) updateProgress();
 
       // Gather ALL cached raw data for this league across all seasons
-      // Use whatever is in rawCache — no additional API calls here
+      // Sort by finished match count so the season with real data is used first for standData
       let allMatches = [];
       let standData  = null;
       const seenMatchIds = new Set();
       Object.keys(rawCache)
         .filter(k => k.startsWith(code + '_s'))
-        .sort() // process in season order
+        .sort((a, b) => {
+          const fa = (rawCache[a].allMatchData.matches || []).filter(m => m.status === 'FINISHED').length;
+          const fb = (rawCache[b].allMatchData.matches || []).filter(m => m.status === 'FINISHED').length;
+          return fb - fa;
+        })
         .forEach(rk => {
           const rd = rawCache[rk];
           if (!standData) standData = rd.standData;
