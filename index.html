@@ -455,7 +455,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.61</span>
+  <span style="color:var(--border2)">v1.62</span>
 </footer>
 
 <script>
@@ -507,20 +507,42 @@ const cache = {};
 // Global request queue — serialises ALL API calls with 7s minimum gap
 // This is the single source of rate limiting; the Worker just proxies
 let _lastApiCall = 0;
-let _apiQueue = Promise.resolve();
+let _apiQueue    = Promise.resolve();
+let _preloadPaused = false; // paused while user-triggered loads run
 
-async function apiFetch(path) {
-  // Chain onto the global queue so requests never overlap
+async function apiFetch(path, isPreload = false) {
   const result = await (_apiQueue = _apiQueue.then(async () => {
-    const now = Date.now();
-    const wait = Math.max(0, _lastApiCall + 7000 - now);
+    // If this is a background preload call and a user action just fired, skip it
+    if (isPreload && _preloadPaused) return null;
+    const now  = Date.now();
+    const wait = Math.max(0, _lastApiCall + 7200 - now); // 7.2s = safely under 10/min
     if (wait > 0) await new Promise(r => setTimeout(r, wait));
     _lastApiCall = Date.now();
     const res = await fetch(BASE + path);
     if (!res.ok) throw new Error(`API returned ${res.status} for ${path}`);
     return res.json();
   }));
+  if (result === null) throw new Error('Preload skipped');
   return result;
+}
+
+// Wrap fetchRaw so preload calls are marked as background
+async function fetchRawPreload(code, asOf) {
+  const season   = seasonYearForDate(asOf);
+  const cacheKey = code + '_s' + season;
+  if (rawCache[cacheKey]) return rawCache[cacheKey];
+  let standData, allMatchData;
+  try {
+    standData    = await apiFetch(`/competitions/${code}/standings?season=${season}`, true);
+    allMatchData = await apiFetch(`/competitions/${code}/matches?season=${season}`, true);
+  } catch(e) {
+    try {
+      standData    = await apiFetch(`/competitions/${code}/standings?season=${season - 1}`, true);
+      allMatchData = await apiFetch(`/competitions/${code}/matches?season=${season - 1}`, true);
+    } catch { throw new Error(`Could not preload ${code}`); }
+  }
+  rawCache[cacheKey] = { standData, allMatchData };
+  return rawCache[cacheKey];
 }
 
 // Returns the as-of date for the form tables tab (always from leagues-date picker)
@@ -1002,9 +1024,7 @@ document.getElementById('testing-toggle').addEventListener('click', function() {
   document.getElementById('testing-track').classList.toggle('on', testingMode);
   document.getElementById('bets-test-controls').style.display = testingMode ? '' : 'none';
   Object.keys(cache).forEach(k => delete cache[k]);
-  // Reset queue so toggle fires immediately
   _apiQueue = Promise.resolve();
-  _lastApiCall = 0;
   loadBets();
 });
 
@@ -1012,7 +1032,7 @@ document.getElementById('form-window-select').addEventListener('change', functio
   formWindow = parseInt(this.value, 10);
   Object.keys(cache).forEach(k => delete cache[k]);
   if (currentView === 'bets') {
-    _apiQueue = Promise.resolve(); _lastApiCall = 0;
+    _apiQueue = Promise.resolve();
     loadBets();
   } else {
     switchLeague(currentLeague);
@@ -1022,8 +1042,8 @@ document.getElementById('form-window-select').addEventListener('change', functio
 
 document.getElementById('testing-apply').addEventListener('click', async function() {
   Object.keys(cache).forEach(k => delete cache[k]);
+  // Reset queue reference but keep _lastApiCall so rate limit is preserved
   _apiQueue = Promise.resolve();
-  _lastApiCall = 0;
   // Ensure seasons for both from and to dates are loaded
   const fromVal = document.getElementById('bets-date-from').value;
   const toVal   = document.getElementById('bets-date-to').value;
@@ -1074,6 +1094,7 @@ function pushRangeBet(betsByDate, m, qualTeam, opponent, isHome, sorted, teamMap
 }
 
 async function loadBets() {
+  _preloadPaused = true; // pause background preload while we run
   const el = document.getElementById('bets-content');
   const totalLeagues = LEAGUES.length;
   let loadedCount = 0;
@@ -1214,8 +1235,9 @@ async function loadBets() {
         }
       }
     }
-    await new Promise(r => setTimeout(r, 50)); // yield to browser to paint spinner
+    await new Promise(r => setTimeout(r, 50));
     renderBetsDateRange(betsByDate, fromDateSnap, toDateSnap);
+    _preloadPaused = false; // resume background preload
   } else {
     // Live mode: single as-of date (today)
     const asOf = getAsOfDate();
@@ -1232,6 +1254,7 @@ async function loadBets() {
       if (loadedCount < totalLeagues) updateProgress();
     }
     renderBets(collectBets(results, asOf), false);
+  _preloadPaused = false; // resume background preload
   }
 }
 
@@ -1278,6 +1301,7 @@ function collectBets(allLeagueData, asOf) {
 
 /* ── League switcher ── */
 async function switchLeague(code) {
+  _preloadPaused = true;
   currentLeague = code;
   document.querySelectorAll('.tab-group-btns .tab').forEach(t =>
     t.classList.toggle('active', t.dataset.code === code)
@@ -1291,7 +1315,9 @@ async function switchLeague(code) {
   try {
     const data = await loadLeague(code, asOf);
     render(code, data);
+    _preloadPaused = false;
   } catch (e) {
+    _preloadPaused = false;
     document.getElementById('content').innerHTML =
       `<div class="error">
         <strong>Couldn't load data.</strong><br>${e.message}<br><br>
@@ -1333,7 +1359,7 @@ async function preloadAllLeagues() {
   for (const { code } of LEAGUES) {
     const rawCached = Object.keys(rawCache).some(k => k.startsWith(code + '_s'));
     if (rawCached) continue;
-    try { await loadLeague(code, asOf); } catch { /* silent fail */ }
+    try { await fetchRawPreload(code, asOf); } catch { /* silent fail */ }
   }
 }
 setTimeout(preloadAllLeagues, 3000);
