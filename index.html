@@ -468,7 +468,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.65</span>
+  <span style="color:var(--border2)">v1.66</span>
 </footer>
 
 <script>
@@ -481,34 +481,34 @@ const oddsCache = {};
 async function fetchOddsForDate(dateStr) {
   if (oddsCache[dateStr]) return oddsCache[dateStr];
   try {
-    // BSD v2 API — fetch events for date range covering that day
-    const from = dateStr + 'T00:00:00';
-    const to   = dateStr + 'T23:59:59';
-    const url  = `${BSD_BASE}/v2/events/?date_from=${from}&date_to=${to}&limit=200`;
-    const res  = await fetch(url, { headers: { 'Authorization': `Token ${BSD_KEY}` } });
+    // Route through Cloudflare Worker /bsd/ prefix to avoid CORS issues
+    const from = encodeURIComponent(dateStr + 'T00:00:00');
+    const to   = encodeURIComponent(dateStr + 'T23:59:59');
+    const url  = `${BASE}/bsd/v2/events/?date_from=${from}&date_to=${to}&limit=200`;
+    const res  = await fetch(url);
     if (!res.ok) { oddsCache[dateStr] = {}; return {}; }
     const data   = await res.json();
     const events = data.events || data.results || [];
     const map    = {};
     for (const e of events) {
-      const homeTeam = e.home_team || e.home || '';
-      const awayTeam = e.away_team || e.away || '';
+      const homeTeam = (e.home_team || e.home || '').trim();
+      const awayTeam = (e.away_team || e.away || '').trim();
       const odds     = e.odds || {};
-      const hw = odds.home_win ?? e.odds_home ?? null;
-      const dr = odds.draw     ?? e.odds_draw ?? null;
-      const aw = odds.away_win ?? e.odds_away ?? null;
-      if (hw || dr || aw) {
+      const hw = odds.home_win != null ? odds.home_win : (e.odds_home ?? null);
+      const dr = odds.draw     != null ? odds.draw     : (e.odds_draw ?? null);
+      const aw = odds.away_win != null ? odds.away_win : (e.odds_away ?? null);
+      if (homeTeam && awayTeam && (hw || dr || aw)) {
         const key = (homeTeam + '|' + awayTeam).toLowerCase();
         map[key] = {
-          home: hw ? parseFloat(hw).toFixed(2) : null,
-          draw: dr ? parseFloat(dr).toFixed(2) : null,
-          away: aw ? parseFloat(aw).toFixed(2) : null,
+          home: hw != null ? parseFloat(hw).toFixed(2) : null,
+          draw: dr != null ? parseFloat(dr).toFixed(2) : null,
+          away: aw != null ? parseFloat(aw).toFixed(2) : null,
         };
       }
     }
     oddsCache[dateStr] = map;
     return map;
-  } catch { oddsCache[dateStr] = {}; return {}; }
+  } catch(err) { oddsCache[dateStr] = {}; return {}; }
 }
 
 const LEAGUE_GROUPS = [
