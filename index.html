@@ -468,7 +468,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.64</span>
+  <span style="color:var(--border2)">v1.65</span>
 </footer>
 
 <script>
@@ -481,25 +481,34 @@ const oddsCache = {};
 async function fetchOddsForDate(dateStr) {
   if (oddsCache[dateStr]) return oddsCache[dateStr];
   try {
-    const res = await fetch(`${BSD_BASE}/events/?date=${dateStr}`, {
-      headers: { 'Authorization': `Token ${BSD_KEY}` }
-    });
-    if (!res.ok) return {};
-    const data = await res.json();
-    const map  = {};
-    for (const e of (data.results || [])) {
-      const key = (e.home_team + '|' + e.away_team).toLowerCase();
-      if (e.odds_home || e.odds_draw || e.odds_away) {
+    // BSD v2 API — fetch events for date range covering that day
+    const from = dateStr + 'T00:00:00';
+    const to   = dateStr + 'T23:59:59';
+    const url  = `${BSD_BASE}/v2/events/?date_from=${from}&date_to=${to}&limit=200`;
+    const res  = await fetch(url, { headers: { 'Authorization': `Token ${BSD_KEY}` } });
+    if (!res.ok) { oddsCache[dateStr] = {}; return {}; }
+    const data   = await res.json();
+    const events = data.events || data.results || [];
+    const map    = {};
+    for (const e of events) {
+      const homeTeam = e.home_team || e.home || '';
+      const awayTeam = e.away_team || e.away || '';
+      const odds     = e.odds || {};
+      const hw = odds.home_win ?? e.odds_home ?? null;
+      const dr = odds.draw     ?? e.odds_draw ?? null;
+      const aw = odds.away_win ?? e.odds_away ?? null;
+      if (hw || dr || aw) {
+        const key = (homeTeam + '|' + awayTeam).toLowerCase();
         map[key] = {
-          home: e.odds_home ? parseFloat(e.odds_home).toFixed(2) : null,
-          draw: e.odds_draw ? parseFloat(e.odds_draw).toFixed(2) : null,
-          away: e.odds_away ? parseFloat(e.odds_away).toFixed(2) : null,
+          home: hw ? parseFloat(hw).toFixed(2) : null,
+          draw: dr ? parseFloat(dr).toFixed(2) : null,
+          away: aw ? parseFloat(aw).toFixed(2) : null,
         };
       }
     }
     oddsCache[dateStr] = map;
     return map;
-  } catch { return {}; }
+  } catch { oddsCache[dateStr] = {}; return {}; }
 }
 
 const LEAGUE_GROUPS = [
@@ -752,9 +761,19 @@ function updateFormKeyLabel() {
 
 /* ── Odds HTML helper ── */
 function oddsHtml(oddsMap, homeTeamName, awayTeamName) {
-  if (!oddsMap) return '';
-  const key = (homeTeamName + '|' + awayTeamName).toLowerCase();
-  const o   = oddsMap[key];
+  if (!oddsMap || !Object.keys(oddsMap).length) return '';
+  const hLow = homeTeamName.toLowerCase();
+  const aLow = awayTeamName.toLowerCase();
+  // Try exact match first, then partial match on both team names
+  let o = oddsMap[hLow + '|' + aLow];
+  if (!o) {
+    const k = Object.keys(oddsMap).find(key => {
+      const [h, a] = key.split('|');
+      return (h.includes(hLow) || hLow.includes(h)) &&
+             (a.includes(aLow) || aLow.includes(a));
+    });
+    if (k) o = oddsMap[k];
+  }
   if (!o || (!o.home && !o.draw && !o.away)) return '';
   const parts = [];
   if (o.home) parts.push(`<span class="odds-pill"><span class="odds-label">H</span> ${o.home}</span>`);
