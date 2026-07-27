@@ -468,7 +468,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.66</span>
+  <span style="color:var(--border2)">v1.67</span>
 </footer>
 
 <script>
@@ -481,22 +481,20 @@ const oddsCache = {};
 async function fetchOddsForDate(dateStr) {
   if (oddsCache[dateStr]) return oddsCache[dateStr];
   try {
-    // Route through Cloudflare Worker /bsd/ prefix to avoid CORS issues
-    const from = encodeURIComponent(dateStr + 'T00:00:00');
-    const to   = encodeURIComponent(dateStr + 'T23:59:59');
-    const url  = `${BASE}/bsd/v2/events/?date_from=${from}&date_to=${to}&limit=200`;
-    const res  = await fetch(url);
+    // Use v1 /api/events/ endpoint which has odds_home/draw/away as top-level fields
+    // Route through Worker /bsd/ to avoid CORS
+    const url = `${BASE}/bsd/events/?date=${dateStr}&limit=200`;
+    const res = await fetch(url);
     if (!res.ok) { oddsCache[dateStr] = {}; return {}; }
     const data   = await res.json();
-    const events = data.events || data.results || [];
+    const events = data.results || data.events || [];
     const map    = {};
     for (const e of events) {
-      const homeTeam = (e.home_team || e.home || '').trim();
-      const awayTeam = (e.away_team || e.away || '').trim();
-      const odds     = e.odds || {};
-      const hw = odds.home_win != null ? odds.home_win : (e.odds_home ?? null);
-      const dr = odds.draw     != null ? odds.draw     : (e.odds_draw ?? null);
-      const aw = odds.away_win != null ? odds.away_win : (e.odds_away ?? null);
+      const homeTeam = (e.home_team || '').trim();
+      const awayTeam = (e.away_team || '').trim();
+      const hw = e.odds_home ?? null;
+      const dr = e.odds_draw ?? null;
+      const aw = e.odds_away ?? null;
       if (homeTeam && awayTeam && (hw || dr || aw)) {
         const key = (homeTeam + '|' + awayTeam).toLowerCase();
         map[key] = {
