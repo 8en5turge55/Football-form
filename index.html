@@ -231,6 +231,19 @@
     .dot-d { background: var(--draw); }
     .dot-l { background: var(--loss); }
 
+    /* Odds pill */
+    .odds-wrap {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-family: var(--mono); font-size: 11px; margin-left: 4px;
+    }
+    .odds-pill {
+      padding: 1px 5px; border-radius: 3px;
+      border: 1px solid var(--border2);
+      background: var(--surface2); color: var(--muted);
+      white-space: nowrap;
+    }
+    .odds-label { font-size: 10px; color: var(--muted); opacity: 0.7; }
+
     /* Result pill */
     .fix-result {
       display: inline-flex; align-items: center; gap: 5px;
@@ -383,7 +396,7 @@
 <body>
 
 <header>
-  <h1>Football Form Table</h1>
+  <h1>Football Form Tables</h1>
   
 </header>
 
@@ -455,11 +468,39 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.62</span>
+  <span style="color:var(--border2)">v1.64</span>
 </footer>
 
 <script>
-const BASE = 'https://football-proxy.bensturgess83.workers.dev';
+const BASE     = 'https://football-proxy.bensturgess83.workers.dev';
+const BSD_BASE = 'https://sports.bzzoiro.com/api';
+const BSD_KEY  = 'fe8b777471855480ad08fac3a52bf7a0a4ebc78a';
+
+const oddsCache = {};
+
+async function fetchOddsForDate(dateStr) {
+  if (oddsCache[dateStr]) return oddsCache[dateStr];
+  try {
+    const res = await fetch(`${BSD_BASE}/events/?date=${dateStr}`, {
+      headers: { 'Authorization': `Token ${BSD_KEY}` }
+    });
+    if (!res.ok) return {};
+    const data = await res.json();
+    const map  = {};
+    for (const e of (data.results || [])) {
+      const key = (e.home_team + '|' + e.away_team).toLowerCase();
+      if (e.odds_home || e.odds_draw || e.odds_away) {
+        map[key] = {
+          home: e.odds_home ? parseFloat(e.odds_home).toFixed(2) : null,
+          draw: e.odds_draw ? parseFloat(e.odds_draw).toFixed(2) : null,
+          away: e.odds_away ? parseFloat(e.odds_away).toFixed(2) : null,
+        };
+      }
+    }
+    oddsCache[dateStr] = map;
+    return map;
+  } catch { return {}; }
+}
 
 const LEAGUE_GROUPS = [
   {
@@ -691,7 +732,14 @@ async function loadLeague(code, asOfDate) {
     }
   }
 
-  const data = { teams, teamMap, nextRound, fetched: new Date(), asOf };
+  // Fetch odds for next fixture dates (non-blocking)
+  const fixtureDates = [...new Set(Object.values(nextRound).map(f => new Date(f.date).toISOString().slice(0, 10)))];
+  const oddsMap = {};
+  for (const d of fixtureDates) {
+    const m = await fetchOddsForDate(d);
+    Object.assign(oddsMap, m);
+  }
+  const data = { teams, teamMap, nextRound, fetched: new Date(), asOf, oddsMap };
   cache[cacheKey] = data;
   return data;
 }
@@ -700,6 +748,19 @@ async function loadLeague(code, asOfDate) {
 function updateFormKeyLabel() {
   const col = document.getElementById('form-col-header');
   if (col) col.textContent = `Last ${formWindow}`;
+}
+
+/* ── Odds HTML helper ── */
+function oddsHtml(oddsMap, homeTeamName, awayTeamName) {
+  if (!oddsMap) return '';
+  const key = (homeTeamName + '|' + awayTeamName).toLowerCase();
+  const o   = oddsMap[key];
+  if (!o || (!o.home && !o.draw && !o.away)) return '';
+  const parts = [];
+  if (o.home) parts.push(`<span class="odds-pill"><span class="odds-label">H</span> ${o.home}</span>`);
+  if (o.draw) parts.push(`<span class="odds-pill"><span class="odds-label">D</span> ${o.draw}</span>`);
+  if (o.away) parts.push(`<span class="odds-pill"><span class="odds-label">A</span> ${o.away}</span>`);
+  return parts.length ? `<span class="odds-wrap">${parts.join('')}</span>` : '';
 }
 
 /* ── Result HTML helper ── */
@@ -778,9 +839,12 @@ function render(code, data) {
       const ha      = fix.home ? 'H' : 'A';
       const dateStr = new Date(fix.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
       const resHtml = resultHtml(fix, t.id, teamMap);
-      if (opp) badge = `<span class="fix-badge" style="background:${c.bg};border-color:${c.border};color:${c.text}">
-        <span class="fix-ha">${ha}</span>${opp.name}<span class="fix-ha">· ${dateStr}</span>
-      </span>${resHtml ? ' ' + resHtml : ''}`;
+      if (opp) {
+        const odds = oddsHtml(data.oddsMap, fix.home ? t.name : opp.name, fix.home ? opp.name : t.name);
+        badge = `<span class="fix-badge" style="background:${c.bg};border-color:${c.border};color:${c.text}">
+          <span class="fix-ha">${ha}</span>${opp.name}<span class="fix-ha">· ${dateStr}</span>
+        </span>${resHtml ? ' ' + resHtml : ''}${odds}`;
+      }
     }
 
     const rankStyle = c
@@ -851,6 +915,7 @@ function betCardHtml(b) {
       <span class="bet-dots">${b.dots}</span>
       <span>· ${b.dateStr}</span>
       ${resultHtml(b.fix, b.qualTeam.id, b.teamMap) || ''}
+      ${oddsHtml(b.oddsMap, b.homeTeam.name, b.awayTeam.name)}
     </div>
     <div class="bet-right">
       <span class="bet-league">${b.leagueLabel}</span>
@@ -1089,7 +1154,7 @@ function pushRangeBet(betsByDate, m, qualTeam, opponent, isHome, sorted, teamMap
   // Avoid duplicates
   const key = fixDay + qualTeam.id;
   if (!betsByDate[fixDay].some(b => b._key === key)) {
-    betsByDate[fixDay].push({ qualTeam, opponent, homeTeam, awayTeam, isHome, qualRank, oppRank, ptsDiff, dateStr, fixDay, dots, leagueLabel, fix, teamMap, _key: key });
+    betsByDate[fixDay].push({ qualTeam, opponent, homeTeam, awayTeam, isHome, qualRank, oppRank, ptsDiff, dateStr, fixDay, dots, leagueLabel, fix, teamMap, oddsMap: {}, _key: key });
   }
 }
 
