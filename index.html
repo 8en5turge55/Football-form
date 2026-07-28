@@ -218,6 +218,7 @@
     .col-wdl  { width: 36px; }
     .col-form { width: 100px; }
     .col-fix  { width: auto; min-width: 180px; }
+    .col-odds { width: 110px; }
 
     .rank     { color: var(--muted); font-family: var(--mono); font-size: 11px; }
     .team-name{ font-weight: 500; color: var(--text); }
@@ -468,7 +469,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.67</span>
+  <span style="color:var(--border2)">v1.68</span>
 </footer>
 
 <script>
@@ -554,24 +555,33 @@ const cache = {};
 
 // Global request queue — serialises ALL API calls with 7s minimum gap
 // This is the single source of rate limiting; the Worker just proxies
-let _lastApiCall = 0;
-let _apiQueue    = Promise.resolve();
-let _preloadPaused = false; // paused while user-triggered loads run
+let _lastApiCall  = 0;
+let _apiQueue     = Promise.resolve();
+let _preloadPaused = false;
+let _queueGen     = 0; // incremented to cancel all pending queue entries
 
 async function apiFetch(path, isPreload = false) {
+  const gen = _queueGen;
   const result = await (_apiQueue = _apiQueue.then(async () => {
-    // If this is a background preload call and a user action just fired, skip it
     if (isPreload && _preloadPaused) return null;
+    if (_queueGen !== gen) return null; // cancelled by a newer action
     const now  = Date.now();
-    const wait = Math.max(0, _lastApiCall + 7200 - now); // 7.2s = safely under 10/min
+    const wait = Math.max(0, _lastApiCall + 7200 - now);
     if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    if (_queueGen !== gen) return null; // check again after wait
     _lastApiCall = Date.now();
     const res = await fetch(BASE + path);
     if (!res.ok) throw new Error(`API returned ${res.status} for ${path}`);
     return res.json();
   }));
-  if (result === null) throw new Error('Preload skipped');
+  if (result === null) throw new Error('Request cancelled');
   return result;
+}
+
+function cancelPendingRequests() {
+  _queueGen++;           // invalidate all queued entries
+  _apiQueue = Promise.resolve(); // reset queue
+  _preloadPaused = false;
 }
 
 // Wrap fetchRaw so preload calls are marked as background
@@ -857,10 +867,9 @@ function render(code, data) {
       const dateStr = new Date(fix.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
       const resHtml = resultHtml(fix, t.id, teamMap);
       if (opp) {
-        const odds = oddsHtml(data.oddsMap, fix.home ? t.name : opp.name, fix.home ? opp.name : t.name);
         badge = `<span class="fix-badge" style="background:${c.bg};border-color:${c.border};color:${c.text}">
           <span class="fix-ha">${ha}</span>${opp.name}<span class="fix-ha">· ${dateStr}</span>
-        </span>${resHtml ? ' ' + resHtml : ''}${odds}`;
+        </span>${resHtml ? ' ' + resHtml : ''}`;
       }
     }
 
@@ -878,6 +887,7 @@ function render(code, data) {
       <td class="col-wdl r"><span class="wdl-val">${t.formL}</span></td>
       <td class="col-form"><div class="dots">${dots || '<span style="color:var(--muted);font-size:11px">no data</span>'}</div></td>
       <td class="col-fix">${badge}</td>
+      <td class="col-odds">${oddsHtml(data.oddsMap, fix && fix.home ? t.name : (opp ? opp.name : ''), fix && !fix.home ? t.name : (opp ? opp.name : ''))}</td>
     </tr>`;
   }).join('');
 
@@ -893,6 +903,7 @@ function render(code, data) {
           <th class="col-wdl r">L</th>
           <th class="col-form" id="form-col-header">Last 8</th>
           <th class="col-fix">Next fixture</th>
+          <th class="col-odds">Odds</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -1106,7 +1117,7 @@ document.getElementById('testing-toggle').addEventListener('click', function() {
   document.getElementById('testing-track').classList.toggle('on', testingMode);
   document.getElementById('bets-test-controls').style.display = testingMode ? '' : 'none';
   Object.keys(cache).forEach(k => delete cache[k]);
-  _apiQueue = Promise.resolve();
+  cancelPendingRequests();
   loadBets();
 });
 
@@ -1125,7 +1136,7 @@ document.getElementById('form-window-select').addEventListener('change', functio
 document.getElementById('testing-apply').addEventListener('click', async function() {
   Object.keys(cache).forEach(k => delete cache[k]);
   // Reset queue reference but keep _lastApiCall so rate limit is preserved
-  _apiQueue = Promise.resolve();
+  cancelPendingRequests();
   // Ensure seasons for both from and to dates are loaded
   const fromVal = document.getElementById('bets-date-from').value;
   const toVal   = document.getElementById('bets-date-to').value;
@@ -1450,6 +1461,15 @@ setTimeout(preloadAllLeagues, 3000);
 // Called on demand when a historical date is selected
 async function ensureSeasonLoaded(asOf) {
   const season = seasonYearForDate(asOf);
+  const currentYear = new Date().getFullYear();
+  // Free tier only supports recent seasons — cap at currentYear-1 minimum
+  // Seasons older than 2 years back are restricted on the free plan
+  const minSeason = currentYear - 2;
+  if (season < minSeason) {
+    document.getElementById('bets-content').innerHTML =
+      `<p class="bets-empty">Season ${season}/${season+1} data is not available on the free tier (limit: last 2 seasons).</p>`;
+    return;
+  }
   for (const { code } of LEAGUES) {
     const cacheKey = code + '_s' + season;
     if (rawCache[cacheKey]) continue;
@@ -1457,7 +1477,7 @@ async function ensureSeasonLoaded(asOf) {
       const sd = await apiFetch(`/competitions/${code}/standings?season=${season}`);
       const md = await apiFetch(`/competitions/${code}/matches?season=${season}`);
       rawCache[cacheKey] = { standData: sd, allMatchData: md };
-    } catch { /* silent fail */ }
+    } catch { /* silent fail — may not be available */ }
   }
 }
 </script>
