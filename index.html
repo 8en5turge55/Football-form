@@ -470,7 +470,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.74</span>
+  <span style="color:var(--border2)">v1.76</span>
 </footer>
 
 <script>
@@ -620,17 +620,13 @@ async function fetchRaw(code, asOf, isPreload = false) {
   // For test mode with a historical date, the derived season will have finished matches.
   let standData, allMatchData;
   try {
-    [standData, allMatchData] = await Promise.all([
-      apiFetch(`/competitions/${code}/standings?season=${season}`),
-      apiFetch(`/competitions/${code}/matches?season=${season}`),
-    ]);
+    standData    = await apiFetch(`/competitions/${code}/standings?season=${season}`, isPreload);
+    allMatchData = await apiFetch(`/competitions/${code}/matches?season=${season}`, isPreload);
   } catch(e) {
     // If the season isn't available yet, try the previous one as a last resort
     try {
-      [standData, allMatchData] = await Promise.all([
-        apiFetch(`/competitions/${code}/standings?season=${season - 1}`),
-        apiFetch(`/competitions/${code}/matches?season=${season - 1}`),
-      ]);
+      standData    = await apiFetch(`/competitions/${code}/standings?season=${season - 1}`, isPreload);
+      allMatchData = await apiFetch(`/competitions/${code}/matches?season=${season - 1}`, isPreload);
     } catch(e2) {
       throw new Error(`Could not load data for ${code}: ${e2.message}`);
     }
@@ -1430,20 +1426,15 @@ switchLeague(currentLeague);
 // Pre-warm rawCache for all leagues in the background after initial load
 // so Best Bets loads instantly when user navigates there
 async function preloadAllLeagues() {
-  // Load all leagues sequentially: raw data first, then full league (form + fixtures)
   const asOf = getLeaguesAsOf();
-  for (const { code, label } of LEAGUES) {
-    if (_preloadPaused) break; // user triggered a manual action — stop preload
-    // Skip if already fully loaded (processed cache exists)
+  for (const { code } of LEAGUES) {
+    // Skip if already in cache
     const cacheKey = code + '_' + asOf.toISOString().slice(0, 10) + '_w' + formWindow;
     if (cache[cacheKey]) continue;
-    try {
-      await loadLeague(code, asOf, true); // isPreload=true so queue can skip if cancelled
-    } catch { /* silent fail */ }
+    // Use regular loadLeague — queues behind the rate limiter naturally
+    try { await loadLeague(code, asOf); } catch { /* silent fail */ }
   }
 }
-// Start preloading all leagues after the initial league has rendered
-// Skip the current league (already loaded by switchLeague) and load the rest
 setTimeout(preloadAllLeagues, 2000);
 
 // Ensure rawCache has data for a specific season for all leagues
