@@ -196,7 +196,7 @@
 
     /* Table */
     .table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto; }
     th {
       text-align: left; padding: 7px 10px;
       color: var(--muted); font-weight: 400; font-size: 11px;
@@ -218,7 +218,7 @@
     .col-pts  { width: 44px; }
     .col-wdl  { width: 36px; }
     .col-form { width: 100px; }
-    .col-fix  { width: auto; min-width: 180px; }
+    .col-fix  { width: auto; white-space: nowrap; }
     .col-odds { width: 130px; min-width: 120px; white-space: nowrap; }
 
     .rank     { color: var(--muted); font-family: var(--mono); font-size: 11px; }
@@ -470,7 +470,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.71</span>
+  <span style="color:var(--border2)">v1.74</span>
 </footer>
 
 <script>
@@ -586,23 +586,7 @@ function cancelPendingRequests() {
 }
 
 // Wrap fetchRaw so preload calls are marked as background
-async function fetchRawPreload(code, asOf) {
-  const season   = seasonYearForDate(asOf);
-  const cacheKey = code + '_s' + season;
-  if (rawCache[cacheKey]) return rawCache[cacheKey];
-  let standData, allMatchData;
-  try {
-    standData    = await apiFetch(`/competitions/${code}/standings?season=${season}`, true);
-    allMatchData = await apiFetch(`/competitions/${code}/matches?season=${season}`, true);
-  } catch(e) {
-    try {
-      standData    = await apiFetch(`/competitions/${code}/standings?season=${season - 1}`, true);
-      allMatchData = await apiFetch(`/competitions/${code}/matches?season=${season - 1}`, true);
-    } catch { throw new Error(`Could not preload ${code}`); }
-  }
-  rawCache[cacheKey] = { standData, allMatchData };
-  return rawCache[cacheKey];
-}
+// fetchRawPreload replaced by loadLeague(code, asOf, true)
 
 // Returns the as-of date for the form tables tab (always from leagues-date picker)
 function getLeaguesAsOf() {
@@ -626,7 +610,7 @@ function seasonYearForDate(date) {
   return mo >= 7 ? yr : yr - 1;
 }
 
-async function fetchRaw(code, asOf) {
+async function fetchRaw(code, asOf, isPreload = false) {
   const season   = seasonYearForDate(asOf);
   const cacheKey = code + '_s' + season;
   if (rawCache[cacheKey]) return rawCache[cacheKey];
@@ -656,12 +640,12 @@ async function fetchRaw(code, asOf) {
   return rawCache[cacheKey];
 }
 
-async function loadLeague(code, asOfDate) {
+async function loadLeague(code, asOfDate, isPreload = false) {
   const asOf     = asOfDate instanceof Date ? asOfDate : getAsOfDate();
   const cacheKey = code + '_' + asOf.toISOString().slice(0, 10) + '_w' + formWindow;
   if (cache[cacheKey]) return cache[cacheKey];
 
-  const { standData, allMatchData } = await fetchRaw(code, asOf);
+  const { standData, allMatchData } = await fetchRaw(code, asOf, isPreload);
   const allMatches = allMatchData.matches || [];
 
   // Build team list from standings (for names/ids) but recalculate all stats from match history
@@ -1446,15 +1430,21 @@ switchLeague(currentLeague);
 // Pre-warm rawCache for all leagues in the background after initial load
 // so Best Bets loads instantly when user navigates there
 async function preloadAllLeagues() {
-  // Preload current season only — historical seasons are fetched on demand
+  // Load all leagues sequentially: raw data first, then full league (form + fixtures)
   const asOf = getLeaguesAsOf();
-  for (const { code } of LEAGUES) {
-    const rawCached = Object.keys(rawCache).some(k => k.startsWith(code + '_s'));
-    if (rawCached) continue;
-    try { await fetchRawPreload(code, asOf); } catch { /* silent fail */ }
+  for (const { code, label } of LEAGUES) {
+    if (_preloadPaused) break; // user triggered a manual action — stop preload
+    // Skip if already fully loaded (processed cache exists)
+    const cacheKey = code + '_' + asOf.toISOString().slice(0, 10) + '_w' + formWindow;
+    if (cache[cacheKey]) continue;
+    try {
+      await loadLeague(code, asOf, true); // isPreload=true so queue can skip if cancelled
+    } catch { /* silent fail */ }
   }
 }
-setTimeout(preloadAllLeagues, 3000);
+// Start preloading all leagues after the initial league has rendered
+// Skip the current league (already loaded by switchLeague) and load the rest
+setTimeout(preloadAllLeagues, 2000);
 
 // Ensure rawCache has data for a specific season for all leagues
 // Called on demand when a historical date is selected
