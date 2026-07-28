@@ -469,7 +469,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.68</span>
+  <span style="color:var(--border2)">v1.69</span>
 </footer>
 
 <script>
@@ -861,16 +861,14 @@ function render(code, data) {
     let badge = '<span style="color:var(--muted)">—</span>';
     const fix = nextRound[t.id];
     const c   = pairColor[t.id];
-    if (fix && c) {
-      const opp     = teamMap[fix.opp];
+    const opp = fix ? teamMap[fix.opp] : null;
+    if (fix && c && opp) {
       const ha      = fix.home ? 'H' : 'A';
       const dateStr = new Date(fix.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
       const resHtml = resultHtml(fix, t.id, teamMap);
-      if (opp) {
-        badge = `<span class="fix-badge" style="background:${c.bg};border-color:${c.border};color:${c.text}">
+      badge = `<span class="fix-badge" style="background:${c.bg};border-color:${c.border};color:${c.text}">
           <span class="fix-ha">${ha}</span>${opp.name}<span class="fix-ha">· ${dateStr}</span>
         </span>${resHtml ? ' ' + resHtml : ''}`;
-      }
     }
 
     const rankStyle = c
@@ -887,7 +885,7 @@ function render(code, data) {
       <td class="col-wdl r"><span class="wdl-val">${t.formL}</span></td>
       <td class="col-form"><div class="dots">${dots || '<span style="color:var(--muted);font-size:11px">no data</span>'}</div></td>
       <td class="col-fix">${badge}</td>
-      <td class="col-odds">${oddsHtml(data.oddsMap, fix && fix.home ? t.name : (opp ? opp.name : ''), fix && !fix.home ? t.name : (opp ? opp.name : ''))}</td>
+      <td class="col-odds">${fix && opp ? oddsHtml(data.oddsMap, fix.home ? t.name : opp.name, fix.home ? opp.name : t.name) : ''}</td>
     </tr>`;
   }).join('');
 
