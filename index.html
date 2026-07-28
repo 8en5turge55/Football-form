@@ -51,7 +51,7 @@
     header span { font-size: 12px; color: var(--muted); font-family: var(--mono); }
 
     .container {
-      max-width: 960px;
+      max-width: 1200px;
       margin: 0 auto;
       padding: 0.6rem 2rem 4rem;
     }
@@ -209,6 +209,7 @@
       vertical-align: middle; white-space: nowrap;
       overflow: hidden; text-overflow: ellipsis; max-width: 0;
     }
+    td.col-odds { overflow: visible; white-space: nowrap; max-width: none; }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: var(--surface2); }
 
@@ -218,7 +219,7 @@
     .col-wdl  { width: 36px; }
     .col-form { width: 100px; }
     .col-fix  { width: auto; min-width: 180px; }
-    .col-odds { width: 110px; }
+    .col-odds { width: 130px; min-width: 120px; white-space: nowrap; }
 
     .rank     { color: var(--muted); font-family: var(--mono); font-size: 11px; }
     .team-name{ font-weight: 500; color: var(--text); }
@@ -469,7 +470,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.69</span>
+  <span style="color:var(--border2)">v1.71</span>
 </footer>
 
 <script>
@@ -885,7 +886,7 @@ function render(code, data) {
       <td class="col-wdl r"><span class="wdl-val">${t.formL}</span></td>
       <td class="col-form"><div class="dots">${dots || '<span style="color:var(--muted);font-size:11px">no data</span>'}</div></td>
       <td class="col-fix">${badge}</td>
-      <td class="col-odds">${fix && opp ? oddsHtml(data.oddsMap, fix.home ? t.name : opp.name, fix.home ? opp.name : t.name) : ''}</td>
+      <td class="col-odds">${fix && opp && c ? oddsHtml(data.oddsMap, fix.home ? t.name : opp.name, fix.home ? opp.name : t.name) : ''}</td>
     </tr>`;
   }).join('');
 
