@@ -419,7 +419,7 @@
     <!-- Form Tables date picker: always visible on leagues tab -->
     <div class="testing-date-wrap" id="leagues-date-wrap">
       <label for="leagues-date">Date</label>
-      <input type="date" id="leagues-date" min="2024-08-01" />
+      <input type="date" id="leagues-date" min="2024-08-01" value="2026-07-29" />
     </div>
     <!-- Best Bets: test mode toggle + date range (only on bets tab) -->
     <label class="toggle-wrap" id="testing-toggle" style="display:none" title="Lookup Date Range">
@@ -470,7 +470,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.78</span>
+  <span style="color:var(--border2)">v1.81</span>
 </footer>
 
 <script>
@@ -1096,7 +1096,10 @@ function renderBetsDateRange(betsByDate, fromDate, toDate) {
 let testingMode = false;
 
 // Set date pickers to today by default
-const todayStr = new Date().toISOString().slice(0, 10);
+const _now = new Date();
+const todayStr = _now.getFullYear() + '-' +
+  String(_now.getMonth() + 1).padStart(2, '0') + '-' +
+  String(_now.getDate()).padStart(2, '0');
 document.getElementById('leagues-date').value  = todayStr;
 document.getElementById('bets-date-from').value = todayStr;
 document.getElementById('bets-date-to').value   = todayStr;
@@ -1350,7 +1353,6 @@ async function loadBets() {
       }
     }
     await new Promise(r => setTimeout(r, 50));
-    } // end for each league
     renderBetsDateRange(betsByDate, fromDateSnap, toDateSnap);
     _preloadPaused = false; // resume background preload
   } else {
