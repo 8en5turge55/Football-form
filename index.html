@@ -470,7 +470,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.76</span>
+  <span style="color:var(--border2)">v1.77</span>
 </footer>
 
 <script>
@@ -815,6 +815,17 @@ function render(code, data) {
   const bot3ids  = new Set(sorted.slice(Math.max(0, n - 3)).map(t => t.id));
   const priority = new Set([...top3ids, ...bot3ids]);
 
+  // Identify best bets: top3 team whose next fixture is vs bottom3
+  const bestBetIds = new Set();
+  for (const t of sorted) {
+    const fix = nextRound[t.id];
+    if (!fix) continue;
+    if (top3ids.has(t.id) && bot3ids.has(fix.opp)) bestBetIds.add(t.id);
+    if (bot3ids.has(t.id) && top3ids.has(fix.opp) && nextRound[fix.opp]?.opp === t.id) {
+      // The opponent (top3) is the best bet — mark them too so the icon shows on their row
+    }
+  }
+
   // First pass: pairs where at least one team is in top3 or bottom3
   for (const [tidStr, fix] of Object.entries(nextRound)) {
     const tid = +tidStr;
@@ -865,7 +876,7 @@ function render(code, data) {
       <td class="col-wdl r"><span class="wdl-val">${t.formD}</span></td>
       <td class="col-wdl r"><span class="wdl-val">${t.formL}</span></td>
       <td class="col-form"><div class="dots">${dots || '<span style="color:var(--muted);font-size:11px">no data</span>'}</div></td>
-      <td class="col-fix">${badge}</td>
+      <td class="col-fix">${badge}${bestBetIds.has(t.id) ? '&nbsp;<span title="Best Bet" style="font-size:13px">💷</span>' : ''}</td>
       <td class="col-odds">${fix && opp && c ? oddsHtml(data.oddsMap, fix.home ? t.name : opp.name, fix.home ? opp.name : t.name) : ''}</td>
     </tr>`;
   }).join('');
