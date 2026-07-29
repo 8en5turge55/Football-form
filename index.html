@@ -419,11 +419,11 @@
     <!-- Form Tables date picker: always visible on leagues tab -->
     <div class="testing-date-wrap" id="leagues-date-wrap">
       <label for="leagues-date">Date</label>
-      <input type="date" id="leagues-date" />
+      <input type="date" id="leagues-date" min="2024-08-01" />
     </div>
     <!-- Best Bets: test mode toggle + date range (only on bets tab) -->
-    <label class="toggle-wrap" id="testing-toggle" style="display:none" title="Testing mode">
-      <span>Test Mode</span>
+    <label class="toggle-wrap" id="testing-toggle" style="display:none" title="Lookup Date Range">
+      <span>Lookup Date Range</span>
       <div class="toggle-track" id="testing-track">
         <div class="toggle-thumb"></div>
       </div>
@@ -435,9 +435,9 @@
       <div id="bets-test-controls" style="display:none">
         <div class="testing-date-wrap">
           <label for="bets-date-from">From</label>
-          <input type="date" id="bets-date-from" />
+          <input type="date" id="bets-date-from" min="2024-08-01" />
           <label for="bets-date-to" style="margin-left:8px">To</label>
-          <input type="date" id="bets-date-to" />
+          <input type="date" id="bets-date-to" min="2024-08-01" />
           <button id="testing-apply">Apply</button>
         </div>
       </div>
@@ -470,7 +470,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.77</span>
+  <span style="color:var(--border2)">v1.78</span>
 </footer>
 
 <script>
@@ -979,6 +979,46 @@ function analyticsHtml(bets) {
         <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono);color:var(--muted)">${pct(s.wins, s.withRes)}%</td>
       </tr>`).join('');
 
+  // By-month breakdown
+  const byMonth = {};
+  for (const b of bets) {
+    if (!b.fixDay) continue;
+    const monthKey = b.fixDay.slice(0, 7); // YYYY-MM
+    if (!byMonth[monthKey]) byMonth[monthKey] = { total: 0, wins: 0, withRes: 0 };
+    byMonth[monthKey].total++;
+    if (b.fix?.result) {
+      const r = b.fix.result;
+      const qualWon = b.isHome ? r.hg > r.ag : r.ag > r.hg;
+      byMonth[monthKey].withRes++;
+      if (qualWon) byMonth[monthKey].wins++;
+    }
+  }
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthRows = Object.keys(byMonth).sort().map(mk => {
+    const s    = byMonth[mk];
+    const [yr, mo] = mk.split('-');
+    const label = monthNames[parseInt(mo) - 1] + ' ' + yr;
+    return `
+      <tr>
+        <td style="padding:4px 8px;font-size:12px;color:var(--text)">${label}</td>
+        <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono);color:var(--muted)">${s.total}</td>
+        <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono);color:var(--accent)">${s.wins}</td>
+        <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono);color:var(--muted)">${pct(s.wins, s.withRes)}%</td>
+      </tr>`;
+  }).join('');
+
+  const thStyle = 'padding:4px 8px;font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:0.06em;text-transform:uppercase';
+  const tableHtml = (rows) => `
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="border-bottom:1px solid var(--border)">
+        <th style="${thStyle};text-align:left">League</th>
+        <th style="${thStyle};text-align:right">Bets</th>
+        <th style="${thStyle};text-align:right">Wins</th>
+        <th style="${thStyle};text-align:right">Win %</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
   return `
   <div class="bets-analytics">
     <div class="bets-analytics-title">Analytics · ${withRes} of ${total} bets have results</div>
@@ -1005,17 +1045,12 @@ function analyticsHtml(bets) {
       </div>
     </div>
     <div style="margin-top:14px">
-      <table style="width:100%;border-collapse:collapse">
-        <thead>
-          <tr style="border-bottom:1px solid var(--border)">
-            <th style="padding:4px 8px;font-size:10px;font-family:var(--mono);text-align:left;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase">League</th>
-            <th style="padding:4px 8px;font-size:10px;font-family:var(--mono);text-align:right;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase">Bets</th>
-            <th style="padding:4px 8px;font-size:10px;font-family:var(--mono);text-align:right;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase">Wins</th>
-            <th style="padding:4px 8px;font-size:10px;font-family:var(--mono);text-align:right;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase">Win %</th>
-          </tr>
-        </thead>
-        <tbody>${leagueRows}</tbody>
-      </table>
+      <div style="font-size:10px;font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">By League</div>
+      ${tableHtml(leagueRows.replace('League', 'League'))}
+    </div>
+    <div style="margin-top:14px">
+      <div style="font-size:10px;font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">By Month</div>
+      ${tableHtml(monthRows)}
     </div>
   </div>`;
 }
@@ -1210,24 +1245,20 @@ async function loadBets() {
 
     const betsByDate = {};
 
-    // For each league, get raw match data then evaluate each fixture in the range
-    // using the form table as-of the day BEFORE that specific fixture
-    for (const { code, label } of LEAGUES) {
-      // Prime rawCache for this league — only if not already cached
-      // Stagger 7s between leagues to respect 10 req/min rate limit (2 calls per league)
-      const primeAsOf = new Date(fromDate.getTime() - 1000);
+    // Force-load ALL leagues before scanning — ensures complete results regardless of preload state
+    const primeAsOf = new Date(fromDateSnap.getTime() - 1000);
+    for (const { code } of LEAGUES) {
       const rawAlreadyCached = Object.keys(rawCache).some(k => k.startsWith(code + '_s'));
       if (!rawAlreadyCached) {
-        try {
-          await loadLeague(code, primeAsOf);
-        } catch(e) {
-          loadedCount++;
-          if (loadedCount < totalLeagues) updateProgress();
-          continue;
-        }
+        try { await loadLeague(code, primeAsOf); } catch { /* silent fail */ }
       }
       loadedCount++;
       if (loadedCount < totalLeagues) updateProgress();
+    }
+    loadedCount = 0; // reset for display
+
+    // For each league, scan fixtures in range using per-match form rebuild
+    for (const { code, label } of LEAGUES) {
 
       // Gather ALL cached raw data for this league across all seasons
       // Sort by finished match count so the season with real data is used first for standData
@@ -1319,6 +1350,7 @@ async function loadBets() {
       }
     }
     await new Promise(r => setTimeout(r, 50));
+    } // end for each league
     renderBetsDateRange(betsByDate, fromDateSnap, toDateSnap);
     _preloadPaused = false; // resume background preload
   } else {
