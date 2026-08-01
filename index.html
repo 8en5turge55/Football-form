@@ -470,7 +470,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.84</span>
+  <span style="color:var(--border2)">v1.85</span>
 </footer>
 
 <script>
@@ -628,17 +628,27 @@ function seasonYearForDate(date) {
 // ── API-Football integration ──
 const afLeagueIdCache = {}; // afCountry+afName -> numeric league id
 
+let _lastAfApiCall = 0;
+let _afApiQueue    = Promise.resolve();
+const AF_MIN_GAP_MS = 6500; // API-Football free tier: 10 req/min max — 6.5s gap keeps us under
+
 async function afApiFetch(path, isPreload = false) {
-  const result = await (_apiQueue = _apiQueue.then(async () => {
+  const result = await (_afApiQueue = _afApiQueue.then(async () => {
     if (isPreload && _preloadPaused) return null;
     const now  = Date.now();
-    const wait = Math.max(0, _lastApiCall + 7200 - now);
+    const wait = Math.max(0, _lastAfApiCall + AF_MIN_GAP_MS - now);
     if (wait > 0) await new Promise(r => setTimeout(r, wait));
     if (isPreload && _preloadPaused) return null;
-    _lastApiCall = Date.now();
+    _lastAfApiCall = Date.now();
     const res = await fetch(BASE + '/af' + path);
     if (!res.ok) throw new Error(`API-Football returned ${res.status} for ${path}`);
-    return res.json();
+    const json = await res.json();
+    // API-Football returns HTTP 200 even on rate-limit/auth errors — check the errors field
+    if (json.errors && Object.keys(json.errors).length > 0) {
+      const msg = Object.values(json.errors).join('; ');
+      throw new Error(`API-Football error: ${msg}`);
+    }
+    return json;
   }));
   if (result === null) throw new Error('Request cancelled');
   return result;
@@ -657,18 +667,20 @@ async function resolveAfLeagueId(afName, afCountry) {
 
 // Normalize API-Football standings + fixtures into the same shape football-data.org uses
 async function fetchRawApiFootball(leagueDef, asOf, isPreload) {
-  const season = seasonYearForDate(asOf);
-  console.log(`[AF] Resolving league id for ${leagueDef.afName} (${leagueDef.afCountry})`);
+  let season = seasonYearForDate(asOf);
   const leagueId = await resolveAfLeagueId(leagueDef.afName, leagueDef.afCountry);
-  console.log(`[AF] League id resolved: ${leagueId}, using season=${season}`);
 
-  const standRes = await afApiFetch(`/standings?league=${leagueId}&season=${season}`, isPreload);
-  console.log(`[AF] standings response:`, JSON.stringify(standRes).slice(0, 500));
-  const fixRes   = await afApiFetch(`/fixtures?league=${leagueId}&season=${season}`, isPreload);
-  console.log(`[AF] fixtures count:`, fixRes.response?.length || 0);
+  let standRes = await afApiFetch(`/standings?league=${leagueId}&season=${season}`, isPreload);
+  let standingsGroup = standRes.response?.[0]?.league?.standings?.[0] || [];
 
-  const standingsGroup = standRes.response?.[0]?.league?.standings?.[0] || [];
-  console.log(`[AF] standingsGroup length:`, standingsGroup.length);
+  // If the derived season has no standings yet (e.g. pre-season), fall back to the previous season
+  if (standingsGroup.length === 0) {
+    season = season - 1;
+    standRes = await afApiFetch(`/standings?league=${leagueId}&season=${season}`, isPreload);
+    standingsGroup = standRes.response?.[0]?.league?.standings?.[0] || [];
+  }
+
+  const fixRes = await afApiFetch(`/fixtures?league=${leagueId}&season=${season}`, isPreload);
   // Normalize standings into football-data.org shape: { standings: [{ table: [...] }] }
   const standData = {
     standings: [{
