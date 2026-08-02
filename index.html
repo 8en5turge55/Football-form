@@ -470,7 +470,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.86</span>
+  <span style="color:var(--border2)">v1.88</span>
 </footer>
 
 <script>
@@ -631,7 +631,20 @@ const afLeagueIdCache = {}; // afCountry+afName -> numeric league id
 
 let _lastAfApiCall = 0;
 let _afApiQueue    = Promise.resolve();
-const AF_MIN_GAP_MS = 6500; // API-Football free tier: 10 req/min max — 6.5s gap keeps us under
+const AF_MIN_GAP_MS = 10000; // widened safety margin — well under 10 req/min
+
+async function afApiFetchOnce(path) {
+  const res = await fetch(BASE + '/af' + path);
+  if (!res.ok) throw new Error(`API-Football returned ${res.status} for ${path}`);
+  const json = await res.json();
+  if (json.errors && Object.keys(json.errors).length > 0) {
+    const msg = Object.values(json.errors).join('; ');
+    const err = new Error(`API-Football error: ${msg}`);
+    err.isRateLimit = msg.toLowerCase().includes('too many requests') || msg.toLowerCase().includes('rate');
+    throw err;
+  }
+  return json;
+}
 
 async function afApiFetch(path, isPreload = false) {
   const result = await (_afApiQueue = _afApiQueue.then(async () => {
@@ -641,15 +654,17 @@ async function afApiFetch(path, isPreload = false) {
     if (wait > 0) await new Promise(r => setTimeout(r, wait));
     if (isPreload && _preloadPaused) return null;
     _lastAfApiCall = Date.now();
-    const res = await fetch(BASE + '/af' + path);
-    if (!res.ok) throw new Error(`API-Football returned ${res.status} for ${path}`);
-    const json = await res.json();
-    // API-Football returns HTTP 200 even on rate-limit/auth errors — check the errors field
-    if (json.errors && Object.keys(json.errors).length > 0) {
-      const msg = Object.values(json.errors).join('; ');
-      throw new Error(`API-Football error: ${msg}`);
+    try {
+      return await afApiFetchOnce(path);
+    } catch (e) {
+      if (e.isRateLimit) {
+        // Back off 20s and retry once
+        await new Promise(r => setTimeout(r, 20000));
+        _lastAfApiCall = Date.now();
+        return await afApiFetchOnce(path);
+      }
+      throw e;
     }
-    return json;
   }));
   if (result === null) throw new Error('Request cancelled');
   return result;
@@ -668,17 +683,30 @@ async function resolveAfLeagueId(afName, afCountry) {
 
 // Normalize API-Football standings + fixtures into the same shape football-data.org uses
 async function fetchRawApiFootball(leagueDef, asOf, isPreload) {
-  let season = seasonYearForDate(asOf);
+  const requestedSeason = seasonYearForDate(asOf);
   const leagueId = await resolveAfLeagueId(leagueDef.afName, leagueDef.afCountry);
 
-  let standRes = await afApiFetch(`/standings?league=${leagueId}&season=${season}`, isPreload);
-  let standingsGroup = standRes.response?.[0]?.league?.standings?.[0] || [];
+  // Try the requested season, then step backwards if the free tier rejects it
+  // (free plan restricts which seasons are accessible — catch and retry rather than
+  // relying on an empty result, since access errors throw before we can check length)
+  let season = requestedSeason;
+  let standRes, standingsGroup;
+  let lastError = null;
 
-  // If the derived season has no standings yet (e.g. pre-season), fall back to the previous season
-  if (standingsGroup.length === 0) {
-    season = season - 1;
-    standRes = await afApiFetch(`/standings?league=${leagueId}&season=${season}`, isPreload);
-    standingsGroup = standRes.response?.[0]?.league?.standings?.[0] || [];
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      standRes = await afApiFetch(`/standings?league=${leagueId}&season=${season}`, isPreload);
+      standingsGroup = standRes.response?.[0]?.league?.standings?.[0] || [];
+      if (standingsGroup.length > 0) break; // success
+      lastError = new Error(`No standings data for season ${season}`);
+    } catch (e) {
+      lastError = e;
+    }
+    season--; // step back and try the previous season
+  }
+
+  if (!standingsGroup || standingsGroup.length === 0) {
+    throw lastError || new Error('Could not find an accessible season');
   }
 
   const fixRes = await afApiFetch(`/fixtures?league=${leagueId}&season=${season}`, isPreload);
