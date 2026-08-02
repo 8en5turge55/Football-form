@@ -470,7 +470,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.85</span>
+  <span style="color:var(--border2)">v1.86</span>
 </footer>
 
 <script>
@@ -512,30 +512,31 @@ async function fetchOddsForDate(dateStr) {
 }
 
 const LEAGUE_GROUPS = [
-  {
-    label: 'England',
-    leagues: [
-      { code: 'PL',  label: 'Premier League' },
-      { code: 'ELC', label: 'Championship'   },
-    ],
-  },
-  {
-    label: 'Europe',
-    leagues: [
-      { code: 'PD',  label: 'La Liga'       },
-      { code: 'BL1', label: 'Bundesliga'    },
-      { code: 'SA',  label: 'Serie A'       },
-      { code: 'FL1', label: 'Ligue 1'       },
-      { code: 'DED', label: 'Eredivisie'    },
-      { code: 'PPL', label: 'Primeira Liga' },
-    ],
-  },
-  {
-    label: 'South America',
-    leagues: [
-      { code: 'BSA', label: 'Brasileirão'   },
-    ],
-  },
+  // Temporarily disabled while diagnosing API-Football rate limiting on League One:
+  // {
+  //   label: 'England',
+  //   leagues: [
+  //     { code: 'PL',  label: 'Premier League' },
+  //     { code: 'ELC', label: 'Championship'   },
+  //   ],
+  // },
+  // {
+  //   label: 'Europe',
+  //   leagues: [
+  //     { code: 'PD',  label: 'La Liga'       },
+  //     { code: 'BL1', label: 'Bundesliga'    },
+  //     { code: 'SA',  label: 'Serie A'       },
+  //     { code: 'FL1', label: 'Ligue 1'       },
+  //     { code: 'DED', label: 'Eredivisie'    },
+  //     { code: 'PPL', label: 'Primeira Liga' },
+  //   ],
+  // },
+  // {
+  //   label: 'South America',
+  //   leagues: [
+  //     { code: 'BSA', label: 'Brasileirão'   },
+  //   ],
+  // },
   {
     label: 'Lower Divisions',
     leagues: [
