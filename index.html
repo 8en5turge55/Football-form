@@ -470,7 +470,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.88</span>
+  <span style="color:var(--border2)">v1.81</span>
 </footer>
 
 <script>
@@ -512,44 +512,28 @@ async function fetchOddsForDate(dateStr) {
 }
 
 const LEAGUE_GROUPS = [
-  // Temporarily disabled while diagnosing API-Football rate limiting on League One:
-  // {
-  //   label: 'England',
-  //   leagues: [
-  //     { code: 'PL',  label: 'Premier League' },
-  //     { code: 'ELC', label: 'Championship'   },
-  //   ],
-  // },
-  // {
-  //   label: 'Europe',
-  //   leagues: [
-  //     { code: 'PD',  label: 'La Liga'       },
-  //     { code: 'BL1', label: 'Bundesliga'    },
-  //     { code: 'SA',  label: 'Serie A'       },
-  //     { code: 'FL1', label: 'Ligue 1'       },
-  //     { code: 'DED', label: 'Eredivisie'    },
-  //     { code: 'PPL', label: 'Primeira Liga' },
-  //   ],
-  // },
-  // {
-  //   label: 'South America',
-  //   leagues: [
-  //     { code: 'BSA', label: 'Brasileirão'   },
-  //   ],
-  // },
   {
-    label: 'Lower Divisions',
+    label: 'England',
     leagues: [
-      { code: 'AF_ENG_L1',  label: 'League One',        provider: 'af', afName: 'League One',       afCountry: 'England' },
-      // Temporarily disabled until League One is confirmed working:
-      // { code: 'AF_ENG_L2',  label: 'League Two',        provider: 'af', afName: 'League Two',       afCountry: 'England' },
-      // { code: 'AF_ENG_NL',  label: 'National League',   provider: 'af', afName: 'National League',  afCountry: 'England' },
-      // { code: 'AF_ITA_SB',  label: 'Serie B',           provider: 'af', afName: 'Serie B',          afCountry: 'Italy'   },
-      // { code: 'AF_ITA_SC',  label: 'Serie C',           provider: 'af', afName: 'Serie C',          afCountry: 'Italy'   },
-      // { code: 'AF_GER_2BL', label: '2. Bundesliga',     provider: 'af', afName: '2. Bundesliga',    afCountry: 'Germany' },
-      // { code: 'AF_GER_3L',  label: '3. Liga',           provider: 'af', afName: '3. Liga',          afCountry: 'Germany' },
-      // { code: 'AF_ESP_SD',  label: 'Segunda División',  provider: 'af', afName: 'Segunda Division',  afCountry: 'Spain'   },
-      // { code: 'AF_FRA_N1',  label: 'National 1',        provider: 'af', afName: 'National 1',       afCountry: 'France'  },
+      { code: 'PL',  label: 'Premier League' },
+      { code: 'ELC', label: 'Championship'   },
+    ],
+  },
+  {
+    label: 'Europe',
+    leagues: [
+      { code: 'PD',  label: 'La Liga'       },
+      { code: 'BL1', label: 'Bundesliga'    },
+      { code: 'SA',  label: 'Serie A'       },
+      { code: 'FL1', label: 'Ligue 1'       },
+      { code: 'DED', label: 'Eredivisie'    },
+      { code: 'PPL', label: 'Primeira Liga' },
+    ],
+  },
+  {
+    label: 'South America',
+    leagues: [
+      { code: 'BSA', label: 'Brasileirão'   },
     ],
   },
 ];
@@ -626,140 +610,10 @@ function seasonYearForDate(date) {
   return mo >= 7 ? yr : yr - 1;
 }
 
-// ── API-Football integration ──
-const afLeagueIdCache = {}; // afCountry+afName -> numeric league id
-
-let _lastAfApiCall = 0;
-let _afApiQueue    = Promise.resolve();
-const AF_MIN_GAP_MS = 10000; // widened safety margin — well under 10 req/min
-
-async function afApiFetchOnce(path) {
-  const res = await fetch(BASE + '/af' + path);
-  if (!res.ok) throw new Error(`API-Football returned ${res.status} for ${path}`);
-  const json = await res.json();
-  if (json.errors && Object.keys(json.errors).length > 0) {
-    const msg = Object.values(json.errors).join('; ');
-    const err = new Error(`API-Football error: ${msg}`);
-    err.isRateLimit = msg.toLowerCase().includes('too many requests') || msg.toLowerCase().includes('rate');
-    throw err;
-  }
-  return json;
-}
-
-async function afApiFetch(path, isPreload = false) {
-  const result = await (_afApiQueue = _afApiQueue.then(async () => {
-    if (isPreload && _preloadPaused) return null;
-    const now  = Date.now();
-    const wait = Math.max(0, _lastAfApiCall + AF_MIN_GAP_MS - now);
-    if (wait > 0) await new Promise(r => setTimeout(r, wait));
-    if (isPreload && _preloadPaused) return null;
-    _lastAfApiCall = Date.now();
-    try {
-      return await afApiFetchOnce(path);
-    } catch (e) {
-      if (e.isRateLimit) {
-        // Back off 20s and retry once
-        await new Promise(r => setTimeout(r, 20000));
-        _lastAfApiCall = Date.now();
-        return await afApiFetchOnce(path);
-      }
-      throw e;
-    }
-  }));
-  if (result === null) throw new Error('Request cancelled');
-  return result;
-}
-
-async function resolveAfLeagueId(afName, afCountry) {
-  const key = afCountry + '|' + afName;
-  if (afLeagueIdCache[key]) return afLeagueIdCache[key];
-  const data = await afApiFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(afCountry)}`);
-  console.log(`[AF] /leagues search "${afName}" "${afCountry}" -> ${data.response?.length || 0} results`, JSON.stringify(data.response?.slice(0,3)));
-  const match = (data.response || [])[0];
-  if (!match) throw new Error(`Could not resolve league id for ${afName} (${afCountry})`);
-  afLeagueIdCache[key] = match.league.id;
-  return match.league.id;
-}
-
-// Normalize API-Football standings + fixtures into the same shape football-data.org uses
-async function fetchRawApiFootball(leagueDef, asOf, isPreload) {
-  const requestedSeason = seasonYearForDate(asOf);
-  const leagueId = await resolveAfLeagueId(leagueDef.afName, leagueDef.afCountry);
-
-  // Try the requested season, then step backwards if the free tier rejects it
-  // (free plan restricts which seasons are accessible — catch and retry rather than
-  // relying on an empty result, since access errors throw before we can check length)
-  let season = requestedSeason;
-  let standRes, standingsGroup;
-  let lastError = null;
-
-  for (let attempt = 0; attempt < 4; attempt++) {
-    try {
-      standRes = await afApiFetch(`/standings?league=${leagueId}&season=${season}`, isPreload);
-      standingsGroup = standRes.response?.[0]?.league?.standings?.[0] || [];
-      if (standingsGroup.length > 0) break; // success
-      lastError = new Error(`No standings data for season ${season}`);
-    } catch (e) {
-      lastError = e;
-    }
-    season--; // step back and try the previous season
-  }
-
-  if (!standingsGroup || standingsGroup.length === 0) {
-    throw lastError || new Error('Could not find an accessible season');
-  }
-
-  const fixRes = await afApiFetch(`/fixtures?league=${leagueId}&season=${season}`, isPreload);
-  // Normalize standings into football-data.org shape: { standings: [{ table: [...] }] }
-  const standData = {
-    standings: [{
-      table: standingsGroup.map(row => ({
-        position: row.rank,
-        team: { id: row.team.id, name: row.team.name, shortName: row.team.name },
-        playedGames: row.all.played,
-        won: row.all.win,
-        draw: row.all.draw,
-        lost: row.all.lose,
-        points: row.points,
-      })),
-    }],
-  };
-
-  // Normalize fixtures into football-data.org match shape
-  const matches = (fixRes.response || []).map(f => ({
-    id: f.fixture.id,
-    utcDate: f.fixture.date,
-    status: f.fixture.status.short === 'FT' || f.fixture.status.short === 'AET' || f.fixture.status.short === 'PEN' ? 'FINISHED' : 'SCHEDULED',
-    homeTeam: { id: f.teams.home.id, shortName: f.teams.home.name },
-    awayTeam: { id: f.teams.away.id, shortName: f.teams.away.name },
-    score: {
-      fullTime: {
-        home: f.goals.home,
-        away: f.goals.away,
-      },
-    },
-  }));
-
-  return { standData, allMatchData: { matches } };
-}
-
 async function fetchRaw(code, asOf, isPreload = false) {
   const season   = seasonYearForDate(asOf);
   const cacheKey = code + '_s' + season;
   if (rawCache[cacheKey]) return rawCache[cacheKey];
-
-  const leagueDef = LEAGUES.find(l => l.code === code);
-
-  // API-Football path — different provider, different fetch/normalize logic
-  if (leagueDef && leagueDef.provider === 'af') {
-    try {
-      const data = await fetchRawApiFootball(leagueDef, asOf, isPreload);
-      rawCache[cacheKey] = data;
-      return rawCache[cacheKey];
-    } catch (e) {
-      throw new Error(`Could not load data for ${code}: ${e.message}`);
-    }
-  }
 
   // Always fetch the derived season — don't fall back, even if no finished matches yet.
   // In pre-season (e.g. July) the new season has only scheduled matches; that's correct.
