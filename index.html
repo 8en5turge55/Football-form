@@ -470,7 +470,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.92</span>
+  <span style="color:var(--border2)">v1.93</span>
 </footer>
 
 <script>
@@ -1291,7 +1291,9 @@ document.getElementById('leagues-date').addEventListener('change', async functio
   if (selectedSeason !== currentSeason) {
     await ensureSeasonLoaded(selectedAsOf);
   }
-  switchLeague(currentLeague);
+  await switchLeague(currentLeague);
+  // Preload the remaining leagues for this date in the background
+  preloadAllLeagues(selectedAsOf);
 });
 
 // Test mode toggle (bets tab only)
@@ -1625,17 +1627,17 @@ switchLeague(currentLeague);
 
 // Pre-warm rawCache for all leagues in the background after initial load
 // so Best Bets loads instantly when user navigates there
-async function preloadAllLeagues() {
-  const asOf = getLeaguesAsOf();
+async function preloadAllLeagues(asOfOverride) {
+  const asOf = asOfOverride || getLeaguesAsOf();
   for (const { code } of LEAGUES) {
     // Skip if already in cache
     const cacheKey = code + '_' + asOf.toISOString().slice(0, 10) + '_w' + formWindow;
     if (cache[cacheKey]) continue;
     // Use regular loadLeague — queues behind the rate limiter naturally
-    try { await loadLeague(code, asOf); } catch { /* silent fail */ }
+    try { await loadLeague(code, asOf); } catch { /* silent fail — league may be outside its accessible date range */ }
   }
 }
-setTimeout(preloadAllLeagues, 2000);
+setTimeout(() => preloadAllLeagues(), 2000);
 
 // Ensure rawCache has data for a specific season for all leagues
 // Called on demand when a historical date is selected
