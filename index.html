@@ -424,7 +424,7 @@
     <!-- Form Tables date picker: always visible on leagues tab -->
     <div class="testing-date-wrap" id="leagues-date-wrap">
       <label for="leagues-date">Date</label>
-      <input type="date" id="leagues-date" min="2024-08-01" value="2026-07-29" />
+      <input type="date" id="leagues-date" value="2026-07-29" />
     </div>
     <!-- Best Bets: test mode toggle + date range (only on bets tab) -->
     <label class="toggle-wrap" id="testing-toggle" style="display:none" title="Lookup Date Range">
@@ -440,9 +440,9 @@
       <div id="bets-test-controls" style="display:none">
         <div class="testing-date-wrap">
           <label for="bets-date-from">From</label>
-          <input type="date" id="bets-date-from" min="2024-08-01" />
+          <input type="date" id="bets-date-from" />
           <label for="bets-date-to" style="margin-left:8px">To</label>
-          <input type="date" id="bets-date-to" min="2024-08-01" />
+          <input type="date" id="bets-date-to" />
           <button id="testing-apply">Apply</button>
         </div>
       </div>
@@ -475,7 +475,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.98</span>
+  <span style="color:var(--border2)">v1.99</span>
 </footer>
 
 <script>
@@ -516,50 +516,54 @@ async function fetchOddsForDate(dateStr) {
   } catch(err) { oddsCache[dateStr] = {}; return {}; }
 }
 
-const LEAGUE_GROUPS = [
-  // Temporarily disabled while diagnosing API-Football rate limiting on League One:
-  // {
-  //   label: 'England',
-  //   leagues: [
-  //     { code: 'PL',  label: 'Premier League' },
-  //     { code: 'ELC', label: 'Championship'   },
-  //   ],
-  // },
-  // {
-  //   label: 'Europe',
-  //   leagues: [
-  //     { code: 'PD',  label: 'La Liga'       },
-  //     { code: 'BL1', label: 'Bundesliga'    },
-  //     { code: 'SA',  label: 'Serie A'       },
-  //     { code: 'FL1', label: 'Ligue 1'       },
-  //     { code: 'DED', label: 'Eredivisie'    },
-  //     { code: 'PPL', label: 'Primeira Liga' },
-  //   ],
-  // },
-  // {
-  //   label: 'South America',
-  //   leagues: [
-  //     { code: 'BSA', label: 'Brasileirão'   },
-  //   ],
-  // },
-  {
-    label: 'Lower Divisions',
-    leagues: [
-      { code: 'AF_ENG_L1',  label: 'League One',        flagCode: 'gb-eng', provider: 'af', afName: 'League One',       afCountry: 'England' },
-      { code: 'AF_ENG_L2',  label: 'League Two',        flagCode: 'gb-eng', provider: 'af', afName: 'League Two',       afCountry: 'England' },
-      { code: 'AF_ENG_NL',  label: 'National League',   flagCode: 'gb-eng', provider: 'af', afName: 'National League',  afCountry: 'England' },
-      { code: 'AF_ITA_SB',  label: 'Serie B',           flagCode: 'it',      provider: 'af', afName: 'Serie B',          afCountry: 'Italy'   },
-      { code: 'AF_ITA_SC',  label: 'Serie C',           flagCode: 'it',      provider: 'af', afName: 'Serie C',          afCountry: 'Italy'   },
-      { code: 'AF_GER_2BL', label: '2. Bundesliga',     flagCode: 'de',      provider: 'af', afName: '2. Bundesliga',    afCountry: 'Germany' },
-      { code: 'AF_GER_3L',  label: '3. Liga',           flagCode: 'de',      provider: 'af', afName: '3. Liga',          afCountry: 'Germany' },
-      { code: 'AF_ESP_SD',  label: 'Segunda División',  flagCode: 'es',      provider: 'af', afName: 'Segunda Division',  afCountry: 'Spain'   },
-      { code: 'AF_FRA_L2',  label: 'Ligue 2',              flagCode: 'fr',   provider: 'af', afName: 'Ligue 2',              afCountry: 'France' },
-      { code: 'AF_FRA_N1',  label: 'Championnat National', flagCode: 'fr',   provider: 'af', afName: 'Championnat National', afCountry: 'France' },
-    ],
-  },
+// Flat list — sorted below by country priority (England, Spain, Germany, Italy, then
+// remaining countries alphabetically), then by tier within each country.
+// All leagues now sourced from API-Football.
+const ALL_LEAGUES = [
+  // England
+  { code: 'AF_ENG_PL',  label: 'Premier League',    flagCode: 'gb-eng', provider: 'af', afName: 'Premier League',    afCountry: 'England', country: 'England', tier: 1 },
+  { code: 'AF_ENG_CH',  label: 'Championship',      flagCode: 'gb-eng', provider: 'af', afName: 'Championship',      afCountry: 'England', country: 'England', tier: 2 },
+  { code: 'AF_ENG_L1',  label: 'League One',        flagCode: 'gb-eng', provider: 'af', afName: 'League One',        afCountry: 'England', country: 'England', tier: 3 },
+  { code: 'AF_ENG_L2',  label: 'League Two',        flagCode: 'gb-eng', provider: 'af', afName: 'League Two',        afCountry: 'England', country: 'England', tier: 4 },
+  { code: 'AF_ENG_NL',  label: 'National League',   flagCode: 'gb-eng', provider: 'af', afName: 'National League',   afCountry: 'England', country: 'England', tier: 5 },
+
+  // Spain
+  { code: 'AF_ESP_LL',  label: 'La Liga',           flagCode: 'es', provider: 'af', afName: 'La Liga',           afCountry: 'Spain', country: 'Spain', tier: 1 },
+  { code: 'AF_ESP_SD',  label: 'Segunda División',  flagCode: 'es', provider: 'af', afName: 'Segunda Division',  afCountry: 'Spain', country: 'Spain', tier: 2 },
+
+  // Germany
+  { code: 'AF_GER_BL',  label: 'Bundesliga',        flagCode: 'de', provider: 'af', afName: 'Bundesliga',    afCountry: 'Germany', country: 'Germany', tier: 1 },
+  { code: 'AF_GER_2BL', label: '2. Bundesliga',     flagCode: 'de', provider: 'af', afName: '2. Bundesliga', afCountry: 'Germany', country: 'Germany', tier: 2 },
+  { code: 'AF_GER_3L',  label: '3. Liga',           flagCode: 'de', provider: 'af', afName: '3. Liga',       afCountry: 'Germany', country: 'Germany', tier: 3 },
+
+  // Italy
+  { code: 'AF_ITA_SA',  label: 'Serie A',           flagCode: 'it', provider: 'af', afName: 'Serie A', afCountry: 'Italy', country: 'Italy', tier: 1 },
+  { code: 'AF_ITA_SB',  label: 'Serie B',           flagCode: 'it', provider: 'af', afName: 'Serie B', afCountry: 'Italy', country: 'Italy', tier: 2 },
+  { code: 'AF_ITA_SC',  label: 'Serie C',           flagCode: 'it', provider: 'af', afName: 'Serie C', afCountry: 'Italy', country: 'Italy', tier: 3 },
+
+  // Remaining countries, alphabetical
+  { code: 'AF_BRA_SA',  label: 'Brasileirão',       flagCode: 'br', provider: 'af', afName: 'Serie A',    afCountry: 'Brazil',      country: 'Brazil',      tier: 1 },
+  { code: 'AF_FRA_L1',  label: 'Ligue 1',           flagCode: 'fr', provider: 'af', afName: 'Ligue 1',    afCountry: 'France',      country: 'France',      tier: 1 },
+  { code: 'AF_FRA_L2',  label: 'Ligue 2',           flagCode: 'fr', provider: 'af', afName: 'Ligue 2',    afCountry: 'France',      country: 'France',      tier: 2 },
+  { code: 'AF_NED_ED',  label: 'Eredivisie',        flagCode: 'nl', provider: 'af', afName: 'Eredivisie', afCountry: 'Netherlands', country: 'Netherlands', tier: 1 },
+  { code: 'AF_POR_PL',  label: 'Primeira Liga',     flagCode: 'pt', provider: 'af', afName: 'Primeira Liga', afCountry: 'Portugal', country: 'Portugal',    tier: 1 },
 ];
 
-const LEAGUES = LEAGUE_GROUPS.flatMap(g => g.leagues);
+// Sort: England, Spain, Germany, Italy first (in that order), then remaining countries A-Z; tier ascending within each country
+const COUNTRY_PRIORITY = ['England', 'Spain', 'Germany', 'Italy'];
+function countrySortKey(country) {
+  const idx = COUNTRY_PRIORITY.indexOf(country);
+  return idx === -1 ? COUNTRY_PRIORITY.length : idx;
+}
+ALL_LEAGUES.sort((a, b) => {
+  const ap = countrySortKey(a.country), bp = countrySortKey(b.country);
+  if (ap !== bp) return ap - bp;
+  if (ap === COUNTRY_PRIORITY.length && a.country !== b.country) return a.country.localeCompare(b.country);
+  return a.tier - b.tier;
+});
+
+const LEAGUE_GROUPS = [{ label: '', leagues: ALL_LEAGUES }];
+const LEAGUES = ALL_LEAGUES;
 
 const PAIR_COLORS = [
   { bg: 'rgba(255,80,80,0.15)',   border: 'rgba(255,80,80,0.4)',   text: '#ff6b6b' },  // red
