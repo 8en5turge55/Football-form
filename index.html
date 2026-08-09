@@ -220,6 +220,11 @@
     .col-form { width: 100px; }
     .col-fix  { width: auto; white-space: nowrap; }
     .col-odds { width: 130px; min-width: 120px; white-space: nowrap; }
+    .flag-icon {
+      width: 16px; height: 12px; object-fit: cover;
+      border-radius: 2px; vertical-align: middle; margin-right: 5px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.08);
+    }
 
     .rank     { color: var(--muted); font-family: var(--mono); font-size: 11px; }
     .team-name{ font-weight: 500; color: var(--text); }
@@ -470,7 +475,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.81</span>
+  <span style="color:var(--border2)">v1.96</span>
 </footer>
 
 <script>
@@ -512,28 +517,43 @@ async function fetchOddsForDate(dateStr) {
 }
 
 const LEAGUE_GROUPS = [
+  // Temporarily disabled while diagnosing API-Football rate limiting on League One:
+  // {
+  //   label: 'England',
+  //   leagues: [
+  //     { code: 'PL',  label: 'Premier League' },
+  //     { code: 'ELC', label: 'Championship'   },
+  //   ],
+  // },
+  // {
+  //   label: 'Europe',
+  //   leagues: [
+  //     { code: 'PD',  label: 'La Liga'       },
+  //     { code: 'BL1', label: 'Bundesliga'    },
+  //     { code: 'SA',  label: 'Serie A'       },
+  //     { code: 'FL1', label: 'Ligue 1'       },
+  //     { code: 'DED', label: 'Eredivisie'    },
+  //     { code: 'PPL', label: 'Primeira Liga' },
+  //   ],
+  // },
+  // {
+  //   label: 'South America',
+  //   leagues: [
+  //     { code: 'BSA', label: 'Brasileirão'   },
+  //   ],
+  // },
   {
-    label: 'England',
+    label: 'Lower Divisions',
     leagues: [
-      { code: 'PL',  label: 'Premier League' },
-      { code: 'ELC', label: 'Championship'   },
-    ],
-  },
-  {
-    label: 'Europe',
-    leagues: [
-      { code: 'PD',  label: 'La Liga'       },
-      { code: 'BL1', label: 'Bundesliga'    },
-      { code: 'SA',  label: 'Serie A'       },
-      { code: 'FL1', label: 'Ligue 1'       },
-      { code: 'DED', label: 'Eredivisie'    },
-      { code: 'PPL', label: 'Primeira Liga' },
-    ],
-  },
-  {
-    label: 'South America',
-    leagues: [
-      { code: 'BSA', label: 'Brasileirão'   },
+      { code: 'AF_ENG_L1',  label: 'League One',        flagCode: 'gb-eng', provider: 'af', afName: 'League One',       afCountry: 'England' },
+      { code: 'AF_ENG_L2',  label: 'League Two',        flagCode: 'gb-eng', provider: 'af', afName: 'League Two',       afCountry: 'England' },
+      { code: 'AF_ENG_NL',  label: 'National League',   flagCode: 'gb-eng', provider: 'af', afName: 'National League',  afCountry: 'England' },
+      { code: 'AF_ITA_SB',  label: 'Serie B',           flagCode: 'it',      provider: 'af', afName: 'Serie B',          afCountry: 'Italy'   },
+      { code: 'AF_ITA_SC',  label: 'Serie C',           flagCode: 'it',      provider: 'af', afName: 'Serie C',          afCountry: 'Italy'   },
+      { code: 'AF_GER_2BL', label: '2. Bundesliga',     flagCode: 'de',      provider: 'af', afName: '2. Bundesliga',    afCountry: 'Germany' },
+      { code: 'AF_GER_3L',  label: '3. Liga',           flagCode: 'de',      provider: 'af', afName: '3. Liga',          afCountry: 'Germany' },
+      { code: 'AF_ESP_SD',  label: 'Segunda División',  flagCode: 'es',      provider: 'af', afName: 'Segunda Division',  afCountry: 'Spain'   },
+      { code: 'AF_FRA_N1',  label: 'National 1',        flagCode: 'fr',      provider: 'af', afName: 'National 1',       afCountry: 'France'  },
     ],
   },
 ];
@@ -549,7 +569,7 @@ const PAIR_COLORS = [
   { bg: 'rgba(255,140,0,0.15)',   border: 'rgba(255,140,0,0.4)',   text: '#ff8c00' },  // orange
 ];
 
-let currentLeague = 'PL';
+let currentLeague = LEAGUES[0]?.code || 'PL';
 let currentView   = 'leagues';
 let formWindow    = 8; // number of matches to consider for form
 const cache = {};
@@ -610,10 +630,126 @@ function seasonYearForDate(date) {
   return mo >= 7 ? yr : yr - 1;
 }
 
+// ── API-Football integration ──
+const afLeagueIdCache = {}; // afCountry+afName -> numeric league id
+
+let _lastAfApiCall = 0;
+let _afApiQueue    = Promise.resolve();
+const AF_MIN_GAP_MS = 300; // plan allows 5 req/sec — 300ms gap keeps us comfortably under
+
+async function afApiFetchOnce(path) {
+  const res = await fetch(BASE + '/af' + path);
+  if (!res.ok) throw new Error(`API-Football returned ${res.status} for ${path}`);
+  const json = await res.json();
+  if (json.errors && Object.keys(json.errors).length > 0) {
+    const msg = Object.values(json.errors).join('; ');
+    const err = new Error(`API-Football error: ${msg}`);
+    err.isRateLimit = msg.toLowerCase().includes('too many requests') || msg.toLowerCase().includes('rate');
+    throw err;
+  }
+  return json;
+}
+
+async function afApiFetch(path, isPreload = false) {
+  const result = await (_afApiQueue = _afApiQueue.then(async () => {
+    if (isPreload && _preloadPaused) return null;
+    const now  = Date.now();
+    const wait = Math.max(0, _lastAfApiCall + AF_MIN_GAP_MS - now);
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    if (isPreload && _preloadPaused) return null;
+    _lastAfApiCall = Date.now();
+    let attempt = 0;
+    while (true) {
+      try {
+        return await afApiFetchOnce(path);
+      } catch (e) {
+        if (e.isRateLimit && attempt < 3) {
+          attempt++;
+          const backoff = attempt * 3000; // 3s, 6s, 9s
+          await new Promise(r => setTimeout(r, backoff));
+          _lastAfApiCall = Date.now();
+          continue;
+        }
+        throw e;
+      }
+    }
+  }));
+  if (result === null) throw new Error('Request cancelled');
+  return result;
+}
+
+async function resolveAfLeagueId(afName, afCountry) {
+  const key = afCountry + '|' + afName;
+  if (afLeagueIdCache[key]) return afLeagueIdCache[key];
+  const data = await afApiFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(afCountry)}`);
+  const match = (data.response || [])[0];
+  if (!match) throw new Error(`Could not resolve league id for ${afName} (${afCountry})`);
+  afLeagueIdCache[key] = match.league.id;
+  return match.league.id;
+}
+
+// Normalize API-Football standings + fixtures into the same shape football-data.org uses
+async function fetchRawApiFootball(leagueDef, asOf, isPreload) {
+  const season = seasonYearForDate(asOf);
+  const leagueId = await resolveAfLeagueId(leagueDef.afName, leagueDef.afCountry);
+
+  const standRes = await afApiFetch(`/standings?league=${leagueId}&season=${season}`, isPreload);
+  const standingsGroup = standRes.response?.[0]?.league?.standings?.[0] || [];
+  if (standingsGroup.length === 0) {
+    throw new Error(`No standings data for ${leagueDef.label} season ${season}`);
+  }
+
+  const fixRes = await afApiFetch(`/fixtures?league=${leagueId}&season=${season}`, isPreload);
+  // Normalize standings into football-data.org shape: { standings: [{ table: [...] }] }
+  const standData = {
+    standings: [{
+      table: standingsGroup.map(row => ({
+        position: row.rank,
+        team: { id: row.team.id, name: row.team.name, shortName: row.team.name },
+        playedGames: row.all.played,
+        won: row.all.win,
+        draw: row.all.draw,
+        lost: row.all.lose,
+        points: row.points,
+      })),
+    }],
+  };
+
+  // Normalize fixtures into football-data.org match shape
+  const matches = (fixRes.response || []).map(f => ({
+    id: f.fixture.id,
+    utcDate: f.fixture.date,
+    status: f.fixture.status.short === 'FT' || f.fixture.status.short === 'AET' || f.fixture.status.short === 'PEN' ? 'FINISHED' : 'SCHEDULED',
+    homeTeam: { id: f.teams.home.id, shortName: f.teams.home.name },
+    awayTeam: { id: f.teams.away.id, shortName: f.teams.away.name },
+    score: {
+      fullTime: {
+        home: f.goals.home,
+        away: f.goals.away,
+      },
+    },
+  }));
+
+  return { standData, allMatchData: { matches } };
+}
+
 async function fetchRaw(code, asOf, isPreload = false) {
   const season   = seasonYearForDate(asOf);
   const cacheKey = code + '_s' + season;
   if (rawCache[cacheKey]) return rawCache[cacheKey];
+
+  const leagueDef = LEAGUES.find(l => l.code === code);
+
+  // API-Football path — different provider, different fetch/normalize logic
+  if (leagueDef && leagueDef.provider === 'af') {
+    try {
+      const data = await fetchRawApiFootball(leagueDef, asOf, isPreload);
+      rawCache[cacheKey] = data;
+      return rawCache[cacheKey];
+    } catch (e) {
+      throw new Error(`Could not load data for ${code}: ${e.message}`);
+    }
+  }
 
   // Always fetch the derived season — don't fall back, even if no finished matches yet.
   // In pre-season (e.g. July) the new season has only scheduled matches; that's correct.
@@ -636,12 +772,18 @@ async function fetchRaw(code, asOf, isPreload = false) {
   return rawCache[cacheKey];
 }
 
+const _inFlightLoads = {}; // dedupe concurrent loadLeague calls for the same cacheKey
+
 async function loadLeague(code, asOfDate, isPreload = false) {
   const asOf     = asOfDate instanceof Date ? asOfDate : getAsOfDate();
   const cacheKey = code + '_' + asOf.toISOString().slice(0, 10) + '_w' + formWindow;
   if (cache[cacheKey]) return cache[cacheKey];
 
-  const { standData, allMatchData } = await fetchRaw(code, asOf, isPreload);
+  // If this exact league+date is already loading, wait for that call instead of starting a new one
+  if (_inFlightLoads[cacheKey]) return _inFlightLoads[cacheKey];
+
+  const loadPromise = (async () => {
+    const { standData, allMatchData } = await fetchRaw(code, asOf, isPreload);
   const allMatches = allMatchData.matches || [];
 
   // Build team list from standings (for names/ids) but recalculate all stats from match history
@@ -737,9 +879,17 @@ async function loadLeague(code, asOfDate, isPreload = false) {
     const m = await fetchOddsForDate(d);
     Object.assign(oddsMap, m);
   }
-  const data = { teams, teamMap, nextRound, fetched: new Date(), asOf, oddsMap };
-  cache[cacheKey] = data;
-  return data;
+    const data = { teams, teamMap, nextRound, fetched: new Date(), asOf, oddsMap };
+    cache[cacheKey] = data;
+    return data;
+  })();
+
+  _inFlightLoads[cacheKey] = loadPromise;
+  try {
+    return await loadPromise;
+  } finally {
+    delete _inFlightLoads[cacheKey];
+  }
 }
 
 /* ── Update form key label ── */
@@ -1136,7 +1286,9 @@ document.getElementById('leagues-date').addEventListener('change', async functio
   if (selectedSeason !== currentSeason) {
     await ensureSeasonLoaded(selectedAsOf);
   }
-  switchLeague(currentLeague);
+  await switchLeague(currentLeague);
+  // Preload the remaining leagues for this date in the background
+  preloadAllLeagues(selectedAsOf);
 });
 
 // Test mode toggle (bets tab only)
@@ -1456,7 +1608,11 @@ LEAGUE_GROUPS.forEach(group => {
   group.leagues.forEach(l => {
     const btn = document.createElement('button');
     btn.className    = 'tab' + (l.code === currentLeague ? ' active' : '');
-    btn.textContent  = l.label;
+    if (l.flagCode) {
+      btn.innerHTML = `<img class="flag-icon" src="https://flagcdn.com/w20/${l.flagCode}.png" alt="" /> ${l.label}`;
+    } else {
+      btn.textContent = l.label;
+    }
     btn.dataset.code = l.code;
     btn.setAttribute('aria-label', `Show ${l.label} form table`);
     btn.onclick = () => switchLeague(l.code);
@@ -1470,17 +1626,17 @@ switchLeague(currentLeague);
 
 // Pre-warm rawCache for all leagues in the background after initial load
 // so Best Bets loads instantly when user navigates there
-async function preloadAllLeagues() {
-  const asOf = getLeaguesAsOf();
+async function preloadAllLeagues(asOfOverride) {
+  const asOf = asOfOverride || getLeaguesAsOf();
   for (const { code } of LEAGUES) {
     // Skip if already in cache
     const cacheKey = code + '_' + asOf.toISOString().slice(0, 10) + '_w' + formWindow;
     if (cache[cacheKey]) continue;
     // Use regular loadLeague — queues behind the rate limiter naturally
-    try { await loadLeague(code, asOf); } catch { /* silent fail */ }
+    try { await loadLeague(code, asOf); } catch { /* silent fail — league may be outside its accessible date range */ }
   }
 }
-setTimeout(preloadAllLeagues, 2000);
+setTimeout(() => preloadAllLeagues(), 2000);
 
 // Ensure rawCache has data for a specific season for all leagues
 // Called on demand when a historical date is selected
