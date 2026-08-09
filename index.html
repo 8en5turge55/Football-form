@@ -850,34 +850,34 @@ async function loadLeague(code, asOfDate, isPreload = false) {
   }
 
   // Next fixture for each team: first match after asOf (any status — may now be finished)
-//  const upcoming = allMatches
-    //  .filter(m => new Date(m.utcDate) > asOf)
-  //  .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
-//
-  // Build a lookup of finished results by team pair
-  //const resultByPair = {};
-  //for (const m of allMatches) {
-    //if (m.status !== 'FINISHED') continue;
-    //const hg = m.score?.fullTime?.home;
-    //const ag = m.score?.fullTime?.away;
-    //if (hg === null || hg === undefined) continue;
-    //const key = [m.homeTeam.id, m.awayTeam.id].join('-');
-    //resultByPair[key] = { hg, ag, homeId: m.homeTeam.id, awayId: m.awayTeam.id };
-  //}
+  const upcoming = allMatches
+    .filter(m => new Date(m.utcDate) > asOf)
+    .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
 
-  //const nextRound = {};
-  //const seen = new Set();
-  //for (const m of upcoming) {
-    //const hid = m.homeTeam.id, aid = m.awayTeam.id;
-    //if (seen.has(hid) || seen.has(aid)) continue;
-    //if (teamMap[hid] && teamMap[aid]) {
+  // Build a lookup of finished results by team pair
+  const resultByPair = {};
+  for (const m of allMatches) {
+    if (m.status !== 'FINISHED') continue;
+    const hg = m.score?.fullTime?.home;
+    const ag = m.score?.fullTime?.away;
+    if (hg === null || hg === undefined) continue;
+    const key = [m.homeTeam.id, m.awayTeam.id].join('-');
+    resultByPair[key] = { hg, ag, homeId: m.homeTeam.id, awayId: m.awayTeam.id };
+  }
+
+  const nextRound = {};
+  const seen = new Set();
+  for (const m of upcoming) {
+    const hid = m.homeTeam.id, aid = m.awayTeam.id;
+    if (seen.has(hid) || seen.has(aid)) continue;
+    if (teamMap[hid] && teamMap[aid]) {
       // Check if this match has since been played (status FINISHED)
-      //const resultKey = [hid, aid].join('-');
-      //const result = m.status === 'FINISHED' ? resultByPair[resultKey] : null;
-      //const entry = { opp: aid, home: true,  date: m.utcDate, result };
-      //nextRound[hid] = entry;
-      //nextRound[aid] = { opp: hid, home: false, date: m.utcDate, result };
-      //seen.add(hid); seen.add(aid);
+      const resultKey = [hid, aid].join('-');
+      const result = m.status === 'FINISHED' ? resultByPair[resultKey] : null;
+      const entry = { opp: aid, home: true,  date: m.utcDate, result };
+      nextRound[hid] = entry;
+      nextRound[aid] = { opp: hid, home: false, date: m.utcDate, result };
+      seen.add(hid); seen.add(aid);
     }
   }
 
