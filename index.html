@@ -475,7 +475,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.99</span>
+  <span style="color:var(--border2)">v1.101</span>
 </footer>
 
 <script>
@@ -638,9 +638,32 @@ function seasonYearForDate(date) {
 // ── API-Football integration ──
 const afLeagueIdCache = {}; // afCountry+afName -> numeric league id
 
-let _lastAfApiCall = 0;
-let _afApiQueue    = Promise.resolve();
-const AF_MIN_GAP_MS = 300; // plan allows 5 req/sec — 300ms gap keeps us comfortably under
+let _afApiQueue = Promise.resolve();
+const AF_WINDOW_MS      = 60000; // 1 minute rolling window
+const AF_MAX_PER_WINDOW = 250;   // hard cap, safely under the 300/min account limit
+const AF_MIN_GAP_MS     = 250;   // also cap instantaneous rate at 4/sec (under the 5/sec limit)
+const _afCallTimestamps = [];    // sliding window of recent call times
+let _lastAfCallAt = 0;
+
+// Blocks until there is room in the rolling 60s window AND the per-second gap has elapsed
+async function afWaitForWindowSlot() {
+  while (true) {
+    const now = Date.now();
+    // Drop timestamps older than the window
+    while (_afCallTimestamps.length && _afCallTimestamps[0] <= now - AF_WINDOW_MS) {
+      _afCallTimestamps.shift();
+    }
+    const gapWait = Math.max(0, _lastAfCallAt + AF_MIN_GAP_MS - now);
+    if (_afCallTimestamps.length < AF_MAX_PER_WINDOW && gapWait === 0) return;
+    if (gapWait > 0) {
+      await new Promise(r => setTimeout(r, gapWait));
+      continue;
+    }
+    // Window is full — wait until the oldest call ages out
+    const waitMs = (_afCallTimestamps[0] + AF_WINDOW_MS) - now + 50;
+    await new Promise(r => setTimeout(r, Math.max(waitMs, 50)));
+  }
+}
 
 async function afApiFetchOnce(path) {
   const res = await fetch(BASE + '/af' + path);
@@ -658,11 +681,10 @@ async function afApiFetchOnce(path) {
 async function afApiFetch(path, isPreload = false) {
   const result = await (_afApiQueue = _afApiQueue.then(async () => {
     if (isPreload && _preloadPaused) return null;
-    const now  = Date.now();
-    const wait = Math.max(0, _lastAfApiCall + AF_MIN_GAP_MS - now);
-    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    await afWaitForWindowSlot();
     if (isPreload && _preloadPaused) return null;
-    _lastAfApiCall = Date.now();
+    _lastAfCallAt = Date.now();
+    _afCallTimestamps.push(_lastAfCallAt);
     let attempt = 0;
     while (true) {
       try {
@@ -670,9 +692,10 @@ async function afApiFetch(path, isPreload = false) {
       } catch (e) {
         if (e.isRateLimit && attempt < 3) {
           attempt++;
-          const backoff = attempt * 3000; // 3s, 6s, 9s
+          const backoff = attempt * 5000; // 5s, 10s, 15s
           await new Promise(r => setTimeout(r, backoff));
-          _lastAfApiCall = Date.now();
+          _lastAfCallAt = Date.now();
+          _afCallTimestamps.push(_lastAfCallAt);
           continue;
         }
         throw e;
