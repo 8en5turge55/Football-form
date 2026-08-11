@@ -475,7 +475,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.101</span>
+  <span style="color:var(--border2)">v1.102</span>
 </footer>
 
 <script>
@@ -545,8 +545,20 @@ const ALL_LEAGUES = [
   { code: 'AF_BRA_SA',  label: 'Brasileirão',       flagCode: 'br', provider: 'af', afName: 'Serie A',    afCountry: 'Brazil',      country: 'Brazil',      tier: 1 },
   { code: 'AF_FRA_L1',  label: 'Ligue 1',           flagCode: 'fr', provider: 'af', afName: 'Ligue 1',    afCountry: 'France',      country: 'France',      tier: 1 },
   { code: 'AF_FRA_L2',  label: 'Ligue 2',           flagCode: 'fr', provider: 'af', afName: 'Ligue 2',    afCountry: 'France',      country: 'France',      tier: 2 },
-  { code: 'AF_NED_ED',  label: 'Eredivisie',        flagCode: 'nl', provider: 'af', afName: 'Eredivisie', afCountry: 'Netherlands', country: 'Netherlands', tier: 1 },
+  { code: 'AF_NED_ED',  label: 'Eredivisie',        flagCode: 'nl', provider: 'af', afName: 'Eredivisie',     afCountry: 'Netherlands', country: 'Netherlands', tier: 1 },
+  { code: 'AF_NED_ED2', label: 'Eerste Divisie',    flagCode: 'nl', provider: 'af', afName: 'Eerste Divisie', afCountry: 'Netherlands', country: 'Netherlands', tier: 2 },
   { code: 'AF_POR_PL',  label: 'Primeira Liga',     flagCode: 'pt', provider: 'af', afName: 'Primeira Liga', afCountry: 'Portugal', country: 'Portugal',    tier: 1 },
+
+  { code: 'AF_ARG_LP',  label: 'Liga Profesional',  flagCode: 'ar', provider: 'af', afName: 'Liga Profesional Argentina', afCountry: 'Argentina', country: 'Argentina', tier: 1 },
+  { code: 'AF_AUT_BL',  label: 'Bundesliga',        flagCode: 'at', provider: 'af', afName: 'Bundesliga',      afCountry: 'Austria', country: 'Austria', tier: 1 },
+  { code: 'AF_BEL_PL',  label: 'Pro League',        flagCode: 'be', provider: 'af', afName: 'Jupiler Pro League', afCountry: 'Belgium', country: 'Belgium', tier: 1 },
+  { code: 'AF_CRO_HNL', label: 'HNL',               flagCode: 'hr', provider: 'af', afName: 'HNL',             afCountry: 'Croatia', country: 'Croatia', tier: 1 },
+  { code: 'AF_MEX_LM',  label: 'Liga MX',           flagCode: 'mx', provider: 'af', afName: 'Liga MX',         afCountry: 'Mexico', country: 'Mexico', tier: 1 },
+  { code: 'AF_SCO_PR',  label: 'Premiership',       flagCode: 'gb-sct', provider: 'af', afName: 'Premiership',   afCountry: 'Scotland', country: 'Scotland', tier: 1 },
+  { code: 'AF_SCO_CH',  label: 'Championship',      flagCode: 'gb-sct', provider: 'af', afName: 'Championship',  afCountry: 'Scotland', country: 'Scotland', tier: 2 },
+  { code: 'AF_SWE_AS',  label: 'Allsvenskan',       flagCode: 'se', provider: 'af', afName: 'Allsvenskan',     afCountry: 'Sweden', country: 'Sweden', tier: 1 },
+  { code: 'AF_TUR_SL',  label: 'Süper Lig',         flagCode: 'tr', provider: 'af', afName: 'Super Lig',       afCountry: 'Turkey', country: 'Turkey', tier: 1 },
+  { code: 'AF_USA_MLS', label: 'MLS',               flagCode: 'us', provider: 'af', afName: 'MLS',             afCountry: 'USA', country: 'USA', tier: 1 },
 ];
 
 // Sort: England, Spain, Germany, Italy first (in that order), then remaining countries A-Z; tier ascending within each country
