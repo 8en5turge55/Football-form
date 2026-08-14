@@ -475,7 +475,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.104</span>
+  <span style="color:var(--border2)">v1.105</span>
 </footer>
 
 <script>
@@ -701,14 +701,26 @@ async function afApiFetch(path, isPreload = false) {
   return result;
 }
 
+const _inFlightLeagueId = {}; // dedupe concurrent resolveAfLeagueId calls for the same league
+
 async function resolveAfLeagueId(afName, afCountry) {
   const key = afCountry + '|' + afName;
   if (afLeagueIdCache[key]) return afLeagueIdCache[key];
-  const data = await afApiFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(afCountry)}`);
-  const match = (data.response || [])[0];
-  if (!match) throw new Error(`Could not resolve league id for ${afName} (${afCountry})`);
-  afLeagueIdCache[key] = match.league.id;
-  return match.league.id;
+  if (_inFlightLeagueId[key]) return _inFlightLeagueId[key];
+
+  const p = (async () => {
+    try {
+      const data = await afApiFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(afCountry)}`);
+      const match = (data.response || [])[0];
+      if (!match) throw new Error(`Could not resolve league id for ${afName} (${afCountry})`);
+      afLeagueIdCache[key] = match.league.id;
+      return match.league.id;
+    } finally {
+      delete _inFlightLeagueId[key];
+    }
+  })();
+  _inFlightLeagueId[key] = p;
+  return p;
 }
 
 // Normalize API-Football standings + fixtures into the same shape football-data.org uses
@@ -756,22 +768,31 @@ async function fetchRawApiFootball(leagueDef, asOf, isPreload) {
   return { standData, allMatchData: { matches } };
 }
 
+const _inFlightRaw = {}; // dedupe concurrent fetchRaw calls for the same code+season
+
 async function fetchRaw(code, asOf, isPreload = false) {
   const season   = seasonYearForDate(asOf);
   const cacheKey = code + '_s' + season;
   if (rawCache[cacheKey]) return rawCache[cacheKey];
+  if (_inFlightRaw[cacheKey]) return _inFlightRaw[cacheKey];
 
   const leagueDef = LEAGUES.find(l => l.code === code);
 
   // API-Football path — different provider, different fetch/normalize logic
   if (leagueDef && leagueDef.provider === 'af') {
-    try {
-      const data = await fetchRawApiFootball(leagueDef, asOf, isPreload);
-      rawCache[cacheKey] = data;
-      return rawCache[cacheKey];
-    } catch (e) {
-      throw new Error(`Could not load data for ${code}: ${e.message}`);
-    }
+    const p = (async () => {
+      try {
+        const data = await fetchRawApiFootball(leagueDef, asOf, isPreload);
+        rawCache[cacheKey] = data;
+        return rawCache[cacheKey];
+      } catch (e) {
+        throw new Error(`Could not load data for ${code}: ${e.message}`);
+      } finally {
+        delete _inFlightRaw[cacheKey];
+      }
+    })();
+    _inFlightRaw[cacheKey] = p;
+    return p;
   }
 
   // Always fetch the derived season — don't fall back, even if no finished matches yet.
