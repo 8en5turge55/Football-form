@@ -475,7 +475,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.105</span>
+  <span style="color:var(--border2)">v1.106</span>
 </footer>
 
 <script>
@@ -652,7 +652,7 @@ function seasonYearForDate(date) {
 const afLeagueIdCache = {}; // afCountry+afName -> numeric league id
 
 let _afApiQueue = Promise.resolve();
-const AF_MIN_GAP_MS = 500; // hard global gap — exactly one request every 500ms, no exceptions
+const AF_MIN_GAP_MS = 1000; // hard global gap — exactly one request every 1s, no exceptions
 let _lastAfCallAt = 0;
 
 // Blocks until at least AF_MIN_GAP_MS has elapsed since the last call, regardless of source
