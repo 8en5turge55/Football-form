@@ -225,6 +225,11 @@
       border-radius: 2px; vertical-align: middle; margin-right: 5px;
       box-shadow: 0 0 0 1px rgba(255,255,255,0.08);
     }
+    .tab.tab-unloaded {
+      opacity: 0.4;
+      filter: grayscale(0.6);
+    }
+    .tab.tab-unloaded:hover { opacity: 0.65; }
 
     .rank     { color: var(--muted); font-family: var(--mono); font-size: 11px; }
     .team-name{ font-weight: 500; color: var(--text); }
@@ -475,7 +480,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.106</span>
+  <span style="color:var(--border2)">v1.108</span>
 </footer>
 
 <script>
@@ -1320,19 +1325,13 @@ window.showView = function(view) {
 };
 
 // Leagues date picker — reload table on change
-document.getElementById('leagues-date').addEventListener('change', async function() {
+document.getElementById('leagues-date').addEventListener('change', function() {
   Object.keys(cache).forEach(k => delete cache[k]);
+  Object.keys(_leagueErrors).forEach(k => delete _leagueErrors[k]);
   const selectedAsOf = new Date(this.value + 'T23:59:59Z');
-  const today = new Date();
-  const selectedSeason  = seasonYearForDate(selectedAsOf);
-  const currentSeason   = seasonYearForDate(today);
-  // If selecting a different season, fetch it first
-  if (selectedSeason !== currentSeason) {
-    await ensureSeasonLoaded(selectedAsOf);
-  }
-  await switchLeague(currentLeague);
-  // Preload the remaining leagues for this date in the background
-  preloadAllLeagues(selectedAsOf);
+  updateTabLoadedStates(); // grey everything out immediately for the new date
+  switchLeague(currentLeague); // will show the waiting screen since cache is now empty
+  preloadAllLeagues(selectedAsOf); // restarts the sequential loader for this date
 });
 
 // Test mode toggle (bets tab only)
@@ -1612,30 +1611,110 @@ function collectBets(allLeagueData, asOf) {
   return bets;
 }
 
-/* ── League switcher ── */
+/* ── Sequential preload: the single source of truth for loading league data.
+   Tabs never trigger their own fetch — clicking just waits for the preloader
+   to reach that league in its fixed order. ── */
+let _preloadToken = 0;
+let _preloadTotal = LEAGUES.length;
+let _preloadDoneCount = 0;
+const _leagueWaiters = {}; // code -> array of callbacks fired when that league finishes (success or fail)
+const _leagueErrors  = {}; // code -> error message, if the last load attempt failed
+
+function currentCacheKeyFor(code, asOf) {
+  return code + '_' + asOf.toISOString().slice(0, 10) + '_w' + formWindow;
+}
+
+function isLeagueLoaded(code, asOf) {
+  return !!cache[currentCacheKeyFor(code, asOf)];
+}
+
+function updateTabLoadedStates() {
+  const asOf = getLeaguesAsOf();
+  document.querySelectorAll('.tab-group-btns .tab').forEach(t => {
+    const loaded = isLeagueLoaded(t.dataset.code, asOf);
+    t.classList.toggle('tab-unloaded', !loaded);
+  });
+}
+
+function updateLoadingProgressDisplay() {
+  const el = document.getElementById('content');
+  if (!el || !el.dataset || el.dataset.waitingFor !== currentLeague) return;
+  el.innerHTML = `<div class="status"><span class="spinner"></span> Loading ${_preloadDoneCount}/${_preloadTotal} leagues…</div>`;
+}
+
+function notifyLeagueSettled(code) {
+  const waiters = _leagueWaiters[code];
+  if (!waiters) return;
+  delete _leagueWaiters[code];
+  waiters.forEach(fn => fn());
+}
+
+async function preloadAllLeagues(asOfOverride) {
+  const myToken = ++_preloadToken;
+  const asOf = asOfOverride || getLeaguesAsOf();
+  _preloadDoneCount = 0;
+  updateLoadingProgressDisplay();
+
+  for (const { code } of LEAGUES) {
+    if (_preloadToken !== myToken) return; // superseded by a newer preload run (e.g. date changed)
+    const cacheKey = currentCacheKeyFor(code, asOf);
+    if (!cache[cacheKey]) {
+      try {
+        await loadLeague(code, asOf);
+        delete _leagueErrors[code];
+      } catch (e) {
+        _leagueErrors[code] = e.message;
+      }
+    }
+    if (_preloadToken !== myToken) return;
+    _preloadDoneCount++;
+    updateTabLoadedStates();
+    updateLoadingProgressDisplay();
+    notifyLeagueSettled(code);
+  }
+}
+
+/* ── League switcher — never fetches directly, only renders what's loaded
+     or shows a waiting screen until the preloader reaches it ── */
 async function switchLeague(code) {
-  _preloadPaused = true;
   currentLeague = code;
   document.querySelectorAll('.tab-group-btns .tab').forEach(t =>
     t.classList.toggle('active', t.dataset.code === code)
   );
-  const asOf     = getLeaguesAsOf();
-  const cacheKey = code + '_' + asOf.toISOString().slice(0, 10) + '_w' + formWindow;
-  if (!cache[cacheKey]) {
-    document.getElementById('content').innerHTML =
-      '<div class="status"><span class="spinner"></span> Loading data…</div>';
+
+  const asOf = getLeaguesAsOf();
+  const cacheKey = currentCacheKeyFor(code, asOf);
+  const contentEl = document.getElementById('content');
+
+  if (cache[cacheKey]) {
+    contentEl.dataset.waitingFor = '';
+    render(code, cache[cacheKey]);
+    return;
   }
-  try {
-    const data = await loadLeague(code, asOf);
-    render(code, data);
-    _preloadPaused = false;
-  } catch (e) {
-    _preloadPaused = false;
-    document.getElementById('content').innerHTML =
-      `<div class="error">
-        <strong>Couldn't load data.</strong><br>${e.message}<br><br>
-        Check your API key or try again — free tier allows 10 requests/min.
-       </div>`;
+
+  if (_leagueErrors[code]) {
+    contentEl.dataset.waitingFor = '';
+    contentEl.innerHTML = `<div class="error"><strong>Couldn't load data.</strong><br>${_leagueErrors[code]}</div>`;
+    return;
+  }
+
+  // Not loaded yet — show progress and wait for the preloader to reach this league
+  contentEl.dataset.waitingFor = code;
+  contentEl.innerHTML = `<div class="status"><span class="spinner"></span> Loading ${_preloadDoneCount}/${_preloadTotal} leagues…</div>`;
+
+  await new Promise(resolve => {
+    if (!_leagueWaiters[code]) _leagueWaiters[code] = [];
+    _leagueWaiters[code].push(resolve);
+  });
+
+  // Only re-render if the user is still looking at this league
+  if (currentLeague !== code) return;
+  if (cache[cacheKey]) {
+    contentEl.dataset.waitingFor = '';
+    render(code, cache[cacheKey]);
+  } else {
+    contentEl.dataset.waitingFor = '';
+    contentEl.innerHTML = `<div class="error"><strong>Couldn't load data.</strong><br>${_leagueErrors[code] || 'Unknown error'}</div>`;
   }
 }
 
@@ -1645,13 +1724,11 @@ LEAGUE_GROUPS.forEach(group => {
   const groupWrap = document.createElement('div');
   groupWrap.className = 'tab-group';
 
-
-
   const groupBtns = document.createElement('div');
   groupBtns.className = 'tab-group-btns';
   group.leagues.forEach(l => {
     const btn = document.createElement('button');
-    btn.className    = 'tab' + (l.code === currentLeague ? ' active' : '');
+    btn.className    = 'tab tab-unloaded' + (l.code === currentLeague ? ' active' : '');
     if (l.flagCode) {
       btn.innerHTML = `<img class="flag-icon" src="https://flagcdn.com/w20/${l.flagCode}.png" alt="" /> ${l.label}`;
     } else {
@@ -1667,20 +1744,7 @@ LEAGUE_GROUPS.forEach(group => {
 });
 
 switchLeague(currentLeague);
-
-// Pre-warm rawCache for all leagues in the background after initial load
-// so Best Bets loads instantly when user navigates there
-async function preloadAllLeagues(asOfOverride) {
-  const asOf = asOfOverride || getLeaguesAsOf();
-  for (const { code } of LEAGUES) {
-    // Skip if already in cache
-    const cacheKey = code + '_' + asOf.toISOString().slice(0, 10) + '_w' + formWindow;
-    if (cache[cacheKey]) continue;
-    // Use regular loadLeague — queues behind the rate limiter naturally
-    try { await loadLeague(code, asOf); } catch { /* silent fail — league may be outside its accessible date range */ }
-  }
-}
-setTimeout(() => preloadAllLeagues(), 2000);
+preloadAllLeagues();
 
 // Ensure rawCache has data for a specific season for all leagues
 // Called on demand when a historical date is selected
