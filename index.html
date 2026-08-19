@@ -480,7 +480,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.110</span>
+  <span style="color:var(--border2)">v1.111</span>
 </footer>
 
 <script>
@@ -671,12 +671,18 @@ async function afApiFetchOnce(path) {
   const res = await fetch(BASE + '/af' + path);
   const remaining = res.headers.get('x-ratelimit-requests-remaining') || res.headers.get('x-ratelimit-remaining');
   const limit     = res.headers.get('x-ratelimit-requests-limit')     || res.headers.get('x-ratelimit-limit');
-  if (remaining !== null || limit !== null) {
-    console.log(`[AF quota] ${path} → remaining: ${remaining ?? '?'} / limit: ${limit ?? '?'}`);
+  const allHeaders = {};
+  res.headers.forEach((v, k) => { allHeaders[k] = v; });
+  console.log(`[AF call] ${path} → status ${res.status} | remaining: ${remaining ?? '?'} / limit: ${limit ?? '?'} | headers:`, allHeaders);
+  const bodyText = await res.text();
+  let json;
+  try { json = JSON.parse(bodyText); } catch { json = null; }
+  if (!res.ok) {
+    console.log(`[AF error body] ${path}:`, bodyText.slice(0, 1000));
+    throw new Error(`API-Football returned ${res.status} for ${path}`);
   }
-  if (!res.ok) throw new Error(`API-Football returned ${res.status} for ${path}`);
-  const json = await res.json();
-  if (json.errors && Object.keys(json.errors).length > 0) {
+  if (json && json.errors && Object.keys(json.errors).length > 0) {
+    console.log(`[AF error field] ${path}:`, json.errors);
     const msg = Object.values(json.errors).join('; ');
     const err = new Error(`API-Football error: ${msg}`);
     err.isRateLimit = msg.toLowerCase().includes('too many requests') || msg.toLowerCase().includes('rate');
