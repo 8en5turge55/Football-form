@@ -480,7 +480,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.111</span>
+  <span style="color:var(--border2)">v1.112</span>
 </footer>
 
 <script>
@@ -668,7 +668,10 @@ async function afWaitForWindowSlot() {
 }
 
 async function afApiFetchOnce(path) {
-  const res = await fetch(BASE + '/af' + path);
+  // Add a cache-busting param so retries with the same path never hit a stale cached response
+  const sep = path.includes('?') ? '&' : '?';
+  const bustedPath = path + sep + '_cb=' + Date.now();
+  const res = await fetch(BASE + '/af' + bustedPath);
   const remaining = res.headers.get('x-ratelimit-requests-remaining') || res.headers.get('x-ratelimit-remaining');
   const limit     = res.headers.get('x-ratelimit-requests-limit')     || res.headers.get('x-ratelimit-limit');
   const allHeaders = {};
