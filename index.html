@@ -480,7 +480,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.108</span>
+  <span style="color:var(--border2)">v1.110</span>
 </footer>
 
 <script>
@@ -669,6 +669,11 @@ async function afWaitForWindowSlot() {
 
 async function afApiFetchOnce(path) {
   const res = await fetch(BASE + '/af' + path);
+  const remaining = res.headers.get('x-ratelimit-requests-remaining') || res.headers.get('x-ratelimit-remaining');
+  const limit     = res.headers.get('x-ratelimit-requests-limit')     || res.headers.get('x-ratelimit-limit');
+  if (remaining !== null || limit !== null) {
+    console.log(`[AF quota] ${path} → remaining: ${remaining ?? '?'} / limit: ${limit ?? '?'}`);
+  }
   if (!res.ok) throw new Error(`API-Football returned ${res.status} for ${path}`);
   const json = await res.json();
   if (json.errors && Object.keys(json.errors).length > 0) {
@@ -691,9 +696,9 @@ async function afApiFetch(path, isPreload = false) {
       try {
         return await afApiFetchOnce(path);
       } catch (e) {
-        if (e.isRateLimit && attempt < 3) {
+        if (e.isRateLimit && attempt < 1) {
           attempt++;
-          const backoff = attempt * 5000; // 5s, 10s, 15s
+          const backoff = 5000; // single 5s retry, then surface the real error
           await new Promise(r => setTimeout(r, backoff));
           _lastAfCallAt = Date.now();
           continue;
