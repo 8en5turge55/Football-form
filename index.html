@@ -480,7 +480,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.121</span>
+  <span style="color:var(--border2)">v1.124</span>
 </footer>
 
 <script>
@@ -751,6 +751,33 @@ async function resolveAfLeagueId(afName, afCountry) {
 }
 
 // Normalize API-Football standings + fixtures into the same shape football-data.org uses
+// Fetch pre-match Match Winner odds for a whole league+season in one call,
+// keyed by fixture ID — far more reliable than name-matching a separate provider.
+// Note: API-Football only retains odds for the last 7 days, which covers
+// essentially all "next fixture" cases since those are always upcoming.
+async function fetchAfOddsForLeague(leagueId, season, isPreload) {
+  const oddsMap = {}; // fixtureId -> { home, draw, away }
+  try {
+    const res = await afApiFetch(`/odds?league=${leagueId}&season=${season}`, isPreload);
+    for (const entry of (res.response || [])) {
+      const fixtureId = entry.fixture?.id;
+      if (!fixtureId) continue;
+      const bookmaker = (entry.bookmakers || [])[0];
+      if (!bookmaker) continue;
+      const bet = (bookmaker.bets || []).find(b => b.name === 'Match Winner');
+      if (!bet) continue;
+      const vals = {};
+      for (const v of (bet.values || [])) {
+        if (v.value === 'Home') vals.home = v.odd;
+        if (v.value === 'Draw') vals.draw = v.odd;
+        if (v.value === 'Away') vals.away = v.odd;
+      }
+      if (vals.home || vals.draw || vals.away) oddsMap[fixtureId] = vals;
+    }
+  } catch { /* odds are best-effort — a failure here shouldn't block form tables */ }
+  return oddsMap;
+}
+
 async function fetchRawApiFootball(leagueDef, asOf, isPreload) {
   const season = seasonYearForDate(asOf);
   const leagueId = await resolveAfLeagueId(leagueDef.afName, leagueDef.afCountry);
@@ -792,7 +819,7 @@ async function fetchRawApiFootball(leagueDef, asOf, isPreload) {
     },
   }));
 
-  return { standData, allMatchData: { matches } };
+  return { standData, allMatchData: { matches }, afLeagueId: leagueId, afSeason: season };
 }
 
 const _inFlightRaw = {}; // dedupe concurrent fetchRaw calls for the same code+season
@@ -854,7 +881,7 @@ async function loadLeague(code, asOfDate, isPreload = false) {
   if (_inFlightLoads[cacheKey]) return _inFlightLoads[cacheKey];
 
   const loadPromise = (async () => {
-    const { standData, allMatchData } = await fetchRaw(code, asOf, isPreload);
+    const { standData, allMatchData, afLeagueId, afSeason } = await fetchRaw(code, asOf, isPreload);
   const allMatches = allMatchData.matches || [];
 
   // Build team list from standings (for names/ids) but recalculate all stats from match history
@@ -936,9 +963,9 @@ async function loadLeague(code, asOfDate, isPreload = false) {
       // Check if this match has since been played (status FINISHED)
       const resultKey = [hid, aid].join('-');
       const result = m.status === 'FINISHED' ? resultByPair[resultKey] : null;
-      const entry = { opp: aid, home: true,  date: m.utcDate, result };
+      const entry = { opp: aid, home: true,  date: m.utcDate, result, fixtureId: m.id };
       nextRound[hid] = entry;
-      nextRound[aid] = { opp: hid, home: false, date: m.utcDate, result };
+      nextRound[aid] = { opp: hid, home: false, date: m.utcDate, result, fixtureId: m.id };
       seen.add(hid); seen.add(aid);
     }
   }
@@ -946,7 +973,7 @@ async function loadLeague(code, asOfDate, isPreload = false) {
   // Odds are fetched lazily by render() when a league is actually viewed —
   // not during preload, to avoid competing with the API-Football request queue
   const oddsMap = {};
-    const data = { teams, teamMap, nextRound, fetched: new Date(), asOf, oddsMap };
+    const data = { teams, teamMap, nextRound, fetched: new Date(), asOf, oddsMap, afLeagueId, afSeason };
     cache[cacheKey] = data;
     return data;
   })();
@@ -966,20 +993,9 @@ function updateFormKeyLabel() {
 }
 
 /* ── Odds HTML helper ── */
-function oddsHtml(oddsMap, homeTeamName, awayTeamName) {
-  if (!oddsMap || !Object.keys(oddsMap).length) return '';
-  const hLow = homeTeamName.toLowerCase();
-  const aLow = awayTeamName.toLowerCase();
-  // Try exact match first, then partial match on both team names
-  let o = oddsMap[hLow + '|' + aLow];
-  if (!o) {
-    const k = Object.keys(oddsMap).find(key => {
-      const [h, a] = key.split('|');
-      return (h.includes(hLow) || hLow.includes(h)) &&
-             (a.includes(aLow) || aLow.includes(a));
-    });
-    if (k) o = oddsMap[k];
-  }
+function oddsHtml(oddsMap, fixtureId) {
+  if (!oddsMap || !fixtureId) return '';
+  const o = oddsMap[fixtureId];
   if (!o || (!o.home && !o.draw && !o.away)) return '';
   const parts = [];
   if (o.home) parts.push(`<span class="odds-pill"><span class="odds-label">H</span> ${o.home}</span>`);
@@ -1020,18 +1036,13 @@ function render(code, data) {
   updateFormKeyLabel();
   const { teams, teamMap, nextRound } = data;
 
-  // Lazily fetch odds for this league's fixture dates only when actually viewed,
-  // then re-render once available — keeps odds fetching off the critical preload path
-  if (!data.oddsFetched) {
+  // Lazily fetch native API-Football odds for this league only when actually viewed —
+  // keeps odds fetching off the critical preload path
+  if (!data.oddsFetched && data.afLeagueId) {
     data.oddsFetched = true;
-    const fixtureDates = [...new Set(Object.values(nextRound).map(f => new Date(f.date).toISOString().slice(0, 10)))];
     (async () => {
-      for (const d of fixtureDates) {
-        try {
-          const m = await fetchOddsForDate(d);
-          Object.assign(data.oddsMap, m);
-        } catch { /* odds are best-effort */ }
-      }
+      const m = await fetchAfOddsForLeague(data.afLeagueId, data.afSeason, false);
+      Object.assign(data.oddsMap, m);
       if (currentLeague === code) render(code, data); // refresh view with odds now filled in
     })();
   }
@@ -1111,7 +1122,7 @@ function render(code, data) {
       <td class="col-wdl r"><span class="wdl-val">${t.formL}</span></td>
       <td class="col-form"><div class="dots">${dots || '<span style="color:var(--muted);font-size:11px">no data</span>'}</div></td>
       <td class="col-fix">${badge}${bestBetIds.has(t.id) ? '&nbsp;<span title="Best Bet" style="font-size:13px">💷</span>' : ''}</td>
-      <td class="col-odds">${fix && opp && c ? oddsHtml(data.oddsMap, fix.home ? t.name : opp.name, fix.home ? opp.name : t.name) : ''}</td>
+      <td class="col-odds">${fix && opp && c ? oddsHtml(data.oddsMap, fix.fixtureId) : ''}</td>
     </tr>`;
   }).join('');
 
@@ -1167,7 +1178,7 @@ function betCardHtml(b) {
       <span class="bet-dots">${b.dots}</span>
       <span>· ${b.dateStr}</span>
       ${resultHtml(b.fix, b.qualTeam.id, b.teamMap) || ''}
-      ${oddsHtml(b.oddsMap, b.homeTeam.name, b.awayTeam.name)}
+      ${oddsHtml(b.oddsMap, b.fix?.fixtureId)}
     </div>
     <div class="bet-right">
       <span class="bet-league">${b.leagueLabel}</span>
@@ -1601,7 +1612,18 @@ async function loadBets() {
       loadedCount++;
       if (loadedCount < totalLeagues) updateProgress();
     }
-    renderBets(collectBets(results, asOf), false);
+    const bets = collectBets(results, asOf);
+    // Fetch odds for whichever leagues actually contributed a qualifying bet —
+    // avoids fetching odds for leagues no one will see in this view
+    const leaguesNeedingOdds = [...new Set(bets.map(b => b.code))]
+      .map(code => results.find(r => r.code === code))
+      .filter(r => r && r.data && r.data.afLeagueId && !r.data.oddsFetched);
+    for (const r of leaguesNeedingOdds) {
+      r.data.oddsFetched = true;
+      const m = await fetchAfOddsForLeague(r.data.afLeagueId, r.data.afSeason, false);
+      Object.assign(r.data.oddsMap, m);
+    }
+    renderBets(bets, false);
   _preloadPaused = false; // resume background preload
   }
 }
@@ -1642,7 +1664,7 @@ function collectBets(allLeagueData, asOf) {
       }).join('');
       const homeTeam = isHome ? qualTeam : opponent;
       const awayTeam = isHome ? opponent : qualTeam;
-      bets.push({ qualTeam, opponent, homeTeam, awayTeam, isHome, qualRank, oppRank, ptsDiff, dateStr, fixDay, dots, leagueLabel: label, code, fix, teamMap });
+      bets.push({ qualTeam, opponent, homeTeam, awayTeam, isHome, qualRank, oppRank, ptsDiff, dateStr, fixDay, dots, leagueLabel: label, code, fix, teamMap, oddsMap: data.oddsMap });
     }
   }
   return bets;
