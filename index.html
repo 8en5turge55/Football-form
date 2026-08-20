@@ -480,7 +480,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.119</span>
+  <span style="color:var(--border2)">v1.121</span>
 </footer>
 
 <script>
@@ -594,6 +594,11 @@ const PAIR_COLORS = [
 
 let currentLeague = LEAGUES[0]?.code || 'PL';
 let currentView   = 'leagues';
+
+// Leagues with 16 or fewer teams use top/bottom 2 instead of top/bottom 3
+function bestBetCutoff(teamCount) {
+  return teamCount <= 16 ? 2 : 3;
+}
 let formWindow    = 8; // number of matches to consider for form
 const cache = {};
 
@@ -657,7 +662,7 @@ function seasonYearForDate(date) {
 const afLeagueIdCache = {}; // afCountry+afName -> numeric league id
 
 let _afApiQueue = Promise.resolve();
-const AF_MIN_GAP_MS = 2500; // hard global gap — one request every 2.5s, no exceptions
+const AF_MIN_GAP_MS = 200; // documented limit: 5 req/sec = 200ms gap
 let _lastAfCallAt = 0;
 
 // Blocks until at least AF_MIN_GAP_MS has elapsed since the last call, regardless of source
@@ -1037,10 +1042,11 @@ function render(code, data) {
   const usedPairs   = new Set();
   let ci = 0;
 
-  // Only colour top 3 + their opponents, and bottom 3 + their opponents
+  // Colour top/bottom N + their opponents — N is 2 for smaller leagues (<=16 teams), else 3
   const n        = sorted.length;
-  const top3ids  = new Set(sorted.slice(0, 3).map(t => t.id));
-  const bot3ids  = new Set(sorted.slice(Math.max(0, n - 3)).map(t => t.id));
+  const cutoff   = bestBetCutoff(n);
+  const top3ids  = new Set(sorted.slice(0, cutoff).map(t => t.id));
+  const bot3ids  = new Set(sorted.slice(Math.max(0, n - cutoff)).map(t => t.id));
   const priority = new Set([...top3ids, ...bot3ids]);
 
   // Identify best bets: top3 team whose next fixture is vs bottom3
@@ -1561,8 +1567,9 @@ async function loadBets() {
         );
         const n = sorted.length;
         if (n < 6) continue;
-        const top3Set    = new Set(sorted.slice(0, 3).map(t => t.id));
-        const bottom3Set = new Set(sorted.slice(n - 3).map(t => t.id));
+        const cutoff = bestBetCutoff(n);
+        const top3Set    = new Set(sorted.slice(0, cutoff).map(t => t.id));
+        const bottom3Set = new Set(sorted.slice(n - cutoff).map(t => t.id));
 
         const hid = m.homeTeam.id, aid = m.awayTeam.id;
         const home = teamMap[hid], away = teamMap[aid];
@@ -1613,8 +1620,9 @@ function collectBets(allLeagueData, asOf) {
     );
     const n = sorted.length;
     if (n < 6) continue;
-    const bottom3Set = new Set(sorted.slice(n - 3).map(t => t.id));
-    const top3       = sorted.slice(0, 3);
+    const cutoff = bestBetCutoff(n);
+    const bottom3Set = new Set(sorted.slice(n - cutoff).map(t => t.id));
+    const top3       = sorted.slice(0, cutoff);
     for (const qualTeam of top3) {
       const fix = nextRound[qualTeam.id];
       if (!fix) continue;
