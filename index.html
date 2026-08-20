@@ -480,7 +480,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.114</span>
+  <span style="color:var(--border2)">v1.116</span>
 </footer>
 
 <script>
@@ -657,7 +657,7 @@ function seasonYearForDate(date) {
 const afLeagueIdCache = {}; // afCountry+afName -> numeric league id
 
 let _afApiQueue = Promise.resolve();
-const AF_MIN_GAP_MS = 1000; // hard global gap — exactly one request every 1s, no exceptions
+const AF_MIN_GAP_MS = 1500; // hard global gap — exactly one request every 1.5s, no exceptions
 let _lastAfCallAt = 0;
 
 // Blocks until at least AF_MIN_GAP_MS has elapsed since the last call, regardless of source
@@ -673,16 +673,13 @@ async function afApiFetchOnce(path) {
   const limit     = res.headers.get('x-ratelimit-requests-limit')     || res.headers.get('x-ratelimit-limit');
   const allHeaders = {};
   res.headers.forEach((v, k) => { allHeaders[k] = v; });
-  console.log(`[AF call] ${path} → status ${res.status} | remaining: ${remaining ?? '?'} / limit: ${limit ?? '?'} | headers:`, allHeaders);
   const bodyText = await res.text();
   let json;
   try { json = JSON.parse(bodyText); } catch { json = null; }
   if (!res.ok) {
-    console.log(`[AF error body] ${path}:`, bodyText.slice(0, 1000));
     throw new Error(`API-Football returned ${res.status} for ${path}`);
   }
   if (json && json.errors && Object.keys(json.errors).length > 0) {
-    console.log(`[AF error field] ${path}:`, json.errors);
     const msg = Object.values(json.errors).join('; ');
     const err = new Error(`API-Football error: ${msg}`);
     err.isRateLimit = msg.toLowerCase().includes('too many requests') || msg.toLowerCase().includes('rate');
@@ -698,13 +695,14 @@ async function afApiFetch(path, isPreload = false) {
     if (isPreload && _preloadPaused) return null;
     _lastAfCallAt = Date.now();
     let attempt = 0;
+    const maxAttempts = 5;
     while (true) {
       try {
         return await afApiFetchOnce(path);
       } catch (e) {
-        if (e.isRateLimit && attempt < 1) {
+        if (e.isRateLimit && attempt < maxAttempts) {
           attempt++;
-          const backoff = 800; // retries succeed almost instantly in practice — no need to wait long
+          const backoff = Math.min(1000 * Math.pow(2, attempt - 1), 15000); // 1s, 2s, 4s, 8s, 15s
           await new Promise(r => setTimeout(r, backoff));
           _lastAfCallAt = Date.now();
           continue;
