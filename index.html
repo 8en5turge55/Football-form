@@ -480,7 +480,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.113</span>
+  <span style="color:var(--border2)">v1.114</span>
 </footer>
 
 <script>
@@ -704,7 +704,7 @@ async function afApiFetch(path, isPreload = false) {
       } catch (e) {
         if (e.isRateLimit && attempt < 1) {
           attempt++;
-          const backoff = 5000; // single 5s retry, then surface the real error
+          const backoff = 800; // retries succeed almost instantly in practice — no need to wait long
           await new Promise(r => setTimeout(r, backoff));
           _lastAfCallAt = Date.now();
           continue;
