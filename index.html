@@ -480,7 +480,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.116</span>
+  <span style="color:var(--border2)">v1.117</span>
 </footer>
 
 <script>
@@ -657,7 +657,7 @@ function seasonYearForDate(date) {
 const afLeagueIdCache = {}; // afCountry+afName -> numeric league id
 
 let _afApiQueue = Promise.resolve();
-const AF_MIN_GAP_MS = 1500; // hard global gap — exactly one request every 1.5s, no exceptions
+const AF_MIN_GAP_MS = 2500; // hard global gap — one request every 2.5s, no exceptions
 let _lastAfCallAt = 0;
 
 // Blocks until at least AF_MIN_GAP_MS has elapsed since the last call, regardless of source
@@ -930,13 +930,9 @@ async function loadLeague(code, asOfDate, isPreload = false) {
     }
   }
 
-  // Fetch odds for next fixture dates (non-blocking)
-  const fixtureDates = [...new Set(Object.values(nextRound).map(f => new Date(f.date).toISOString().slice(0, 10)))];
+  // Odds are fetched lazily by render() when a league is actually viewed —
+  // not during preload, to avoid competing with the API-Football request queue
   const oddsMap = {};
-  for (const d of fixtureDates) {
-    const m = await fetchOddsForDate(d);
-    Object.assign(oddsMap, m);
-  }
     const data = { teams, teamMap, nextRound, fetched: new Date(), asOf, oddsMap };
     cache[cacheKey] = data;
     return data;
@@ -1010,6 +1006,22 @@ function resultHtml(fix, teamId, teamMap) {
 function render(code, data) {
   updateFormKeyLabel();
   const { teams, teamMap, nextRound } = data;
+
+  // Lazily fetch odds for this league's fixture dates only when actually viewed,
+  // then re-render once available — keeps odds fetching off the critical preload path
+  if (!data.oddsFetched) {
+    data.oddsFetched = true;
+    const fixtureDates = [...new Set(Object.values(nextRound).map(f => new Date(f.date).toISOString().slice(0, 10)))];
+    (async () => {
+      for (const d of fixtureDates) {
+        try {
+          const m = await fetchOddsForDate(d);
+          Object.assign(data.oddsMap, m);
+        } catch { /* odds are best-effort */ }
+      }
+      if (currentLeague === code) render(code, data); // refresh view with odds now filled in
+    })();
+  }
   const sorted = [...teams].sort((a, b) => b.formPts - a.formPts || b.pts - a.pts);
 
   const pairColor   = {};
