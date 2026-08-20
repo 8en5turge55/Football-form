@@ -480,7 +480,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.124</span>
+  <span style="color:var(--border2)">v1.125</span>
 </footer>
 
 <script>
@@ -1808,24 +1808,13 @@ preloadAllLeagues();
 // Ensure rawCache has data for a specific season for all leagues
 // Called on demand when a historical date is selected
 async function ensureSeasonLoaded(asOf) {
-  const season = seasonYearForDate(asOf);
-  const currentYear = new Date().getFullYear();
-  // Free tier only supports recent seasons — cap at currentYear-1 minimum
-  // Seasons older than 2 years back are restricted on the free plan
-  const minSeason = currentYear - 2;
-  if (season < minSeason) {
-    document.getElementById('bets-content').innerHTML =
-      `<p class="bets-empty">Season ${season}/${season+1} data is not available on the free tier (limit: last 2 seasons).</p>`;
-    return;
-  }
+  // Delegate to fetchRaw per league — it already knows how to resolve the
+  // correct season and route to the right provider (API-Football) for each league
   for (const { code } of LEAGUES) {
+    const season   = seasonYearForDate(asOf);
     const cacheKey = code + '_s' + season;
     if (rawCache[cacheKey]) continue;
-    try {
-      const sd = await apiFetch(`/competitions/${code}/standings?season=${season}`);
-      const md = await apiFetch(`/competitions/${code}/matches?season=${season}`);
-      rawCache[cacheKey] = { standData: sd, allMatchData: md };
-    } catch { /* silent fail — may not be available */ }
+    try { await fetchRaw(code, asOf); } catch { /* silent fail — may not be available */ }
   }
 }
 </script>
