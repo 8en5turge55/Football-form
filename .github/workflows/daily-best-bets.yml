@@ -1,0 +1,30 @@
+name: Daily Best Bets Email
+
+on:
+  schedule:
+    # Cron is UTC-only and doesn't auto-adjust for daylight saving, so we run
+    # at both possible times (8am PDT and 8am PST) and let the script itself
+    # check the real Pacific time and skip silently if it's not actually 8am there.
+    - cron: '0 15 * * *' # 8am PDT (roughly Mar–Nov)
+    - cron: '0 16 * * *' # 8am PST (roughly Nov–Mar)
+  workflow_dispatch: {} # allows manual runs from the Actions tab for testing (always sends, ignoring the hour check)
+
+jobs:
+  send-best-bets-email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run daily Best Bets job
+        env:
+          AF_KEY: ${{ secrets.AF_KEY }}
+          RESEND_KEY: ${{ secrets.RESEND_KEY }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          SKIP_HOUR_CHECK: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
+        run: node scripts/daily-best-bets.mjs
