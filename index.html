@@ -480,7 +480,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.125</span>
+  <span style="color:var(--border2)">v1.126</span>
 </footer>
 
 <script>
@@ -938,9 +938,11 @@ async function loadLeague(code, asOfDate, isPreload = false) {
     }
   }
 
-  // Next fixture for each team: first match after asOf (any status — may now be finished)
+  // Next fixture for each team: first match after asOf, within the next 21 days
+  // (any status — may now be finished, used to show results in test mode)
+  const nextFixtureCutoff = new Date(asOf.getTime() + 21 * 24 * 60 * 60 * 1000);
   const upcoming = allMatches
-    .filter(m => new Date(m.utcDate) > asOf)
+    .filter(m => new Date(m.utcDate) > asOf && new Date(m.utcDate) <= nextFixtureCutoff)
     .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
 
   // Build a lookup of finished results by team pair
