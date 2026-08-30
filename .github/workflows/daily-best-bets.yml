@@ -2,12 +2,13 @@ name: Daily Best Bets Email
 
 on:
   schedule:
-    # Cron is UTC-only and doesn't auto-adjust for daylight saving, so we run
-    # at both possible times (8am PDT and 8am PST) and let the script itself
-    # check the real Pacific time and skip silently if it's not actually 8am there.
-    - cron: '0 15 * * *' # 8am PDT (roughly Mar–Nov)
-    - cron: '0 16 * * *' # 8am PST (roughly Nov–Mar)
-  workflow_dispatch: {} # allows manual runs from the Actions tab for testing (always sends, ignoring the hour check)
+    # GitHub Actions cron is UTC-only, doesn't auto-adjust for daylight saving,
+    # and runs are "best-effort" (can be delayed). Rather than gating on an exact
+    # hour (which caused silent skips when delayed), we run once daily and always
+    # send — worst case the email lands roughly an hour off for a few weeks
+    # around the twice-yearly DST changes.
+    - cron: '0 15 * * *' # ~8am Pacific (8am PDT most of the year; 7am during PST months)
+  workflow_dispatch: {} # allows manual runs from the Actions tab for testing
 
 jobs:
   send-best-bets-email:
@@ -26,5 +27,4 @@ jobs:
           AF_KEY: ${{ secrets.AF_KEY }}
           RESEND_KEY: ${{ secrets.RESEND_KEY }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
-          SKIP_HOUR_CHECK: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
         run: node scripts/daily-best-bets.mjs
