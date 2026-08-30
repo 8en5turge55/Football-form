@@ -271,19 +271,6 @@ function buildEmailHtml(betsByLeague, dateStr) {
 async function main() {
   const asOf = new Date();
 
-  // The workflow runs twice daily (to cover both PST and PDT) — only actually
-  // proceed if it's really 8am in Los Angeles right now. Manual runs (workflow_dispatch)
-  // set SKIP_HOUR_CHECK=true so you can test at any time of day.
-  const hourInLA = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Los_Angeles',
-    hour: '2-digit',
-    hour12: false,
-  }).format(asOf);
-  if (hourInLA !== '08' && process.env.SKIP_HOUR_CHECK !== 'true') {
-    console.log(`Current LA hour is ${hourInLA}, not 08 — skipping this run (covers the other DST offset).`);
-    return;
-  }
-
   const betsByLeague = {};
   const leagueErrors = {};
 
