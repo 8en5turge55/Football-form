@@ -1,0 +1,30 @@
+name: Daily Best Bets Email
+
+on:
+  schedule:
+    # GitHub Actions cron is UTC-only, doesn't auto-adjust for daylight saving,
+    # and runs are "best-effort" (can be delayed). Rather than gating on an exact
+    # hour (which caused silent skips when delayed), we run once daily and always
+    # send — worst case the email lands roughly an hour off for a few weeks
+    # around the twice-yearly DST changes.
+    - cron: '0 15 * * *' # ~8am Pacific (8am PDT most of the year; 7am during PST months)
+  workflow_dispatch: {} # allows manual runs from the Actions tab for testing
+
+jobs:
+  send-best-bets-email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run daily Best Bets job
+        env:
+          AF_KEY: ${{ secrets.AF_KEY }}
+          RESEND_KEY: ${{ secrets.RESEND_KEY }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: node scripts/daily-best-bets.mjs
