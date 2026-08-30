@@ -231,6 +231,50 @@
     }
     .tab.tab-unloaded:hover { opacity: 0.65; }
 
+    /* Country/League dropdowns */
+    .league-selectors {
+      display: flex; gap: 10px; margin-bottom: 1.25rem; flex-wrap: wrap;
+    }
+    .dropdown { position: relative; min-width: 180px; }
+    .dropdown-btn {
+      width: 100%; text-align: left;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border2);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 13px; font-family: var(--font);
+      cursor: pointer;
+    }
+    .dropdown-btn:hover { border-color: var(--accent); }
+    .dropdown-btn::after {
+      content: '▾'; color: var(--muted); font-size: 11px; margin-left: 8px;
+    }
+    .dropdown-btn.disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+    .dropdown-panel {
+      display: none;
+      position: absolute; top: calc(100% + 4px); left: 0;
+      min-width: 100%; max-height: 320px; overflow-y: auto;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      z-index: 50;
+      padding: 4px;
+    }
+    .dropdown.open .dropdown-panel { display: block; }
+    .dropdown-option {
+      display: flex; align-items: center;
+      padding: 7px 10px; border-radius: var(--radius);
+      font-size: 13px; color: var(--text);
+      cursor: pointer; white-space: nowrap;
+    }
+    .dropdown-option:hover { background: var(--surface); }
+    .dropdown-option.selected { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+    .dropdown-option.selected .flag-icon { box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }
+    .dropdown-option.opt-unloaded { opacity: 0.45; }
+
     .rank     { color: var(--muted); font-family: var(--mono); font-size: 11px; }
     .team-name{ font-weight: 500; color: var(--text); }
     .pts-val  { font-family: var(--mono); font-weight: 600; color: var(--accent); }
@@ -456,7 +500,16 @@
 
   <!-- League Tables view -->
   <div id="view-leagues">
-    <div class="tabs" id="tabs"></div>
+    <div class="league-selectors">
+      <div class="dropdown" id="country-dropdown">
+        <button class="dropdown-btn" id="country-dropdown-btn" type="button"></button>
+        <div class="dropdown-panel" id="country-dropdown-panel"></div>
+      </div>
+      <div class="dropdown" id="league-dropdown">
+        <button class="dropdown-btn" id="league-dropdown-btn" type="button"></button>
+        <div class="dropdown-panel" id="league-dropdown-panel"></div>
+      </div>
+    </div>
 
     <div id="content">
       <div class="status"><span class="spinner"></span> Loading data…</div>
@@ -480,7 +533,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.126</span>
+  <span style="color:var(--border2)">v1.128</span>
 </footer>
 
 <script>
@@ -565,6 +618,24 @@ const ALL_LEAGUES = [
   { code: 'AF_TUR_SL',  label: 'Süper Lig',         flagCode: 'tr', provider: 'af', afName: 'Super Lig',       afCountry: 'Turkey', country: 'Turkey', tier: 1 },
   { code: 'AF_USA_MLS', label: 'MLS',               flagCode: 'us', provider: 'af', afName: 'Major League Soccer', afCountry: 'USA', country: 'USA', tier: 1 },
   { code: 'AF_SUI_SL',  label: 'Super League',      flagCode: 'ch', provider: 'af', afName: 'Super League',    afCountry: 'Switzerland', country: 'Switzerland', tier: 1 },
+
+  { code: 'AF_BRA_SB',  label: 'Serie B',           flagCode: 'br', provider: 'af', afName: 'Serie B',                afCountry: 'Brazil',     country: 'Brazil',     tier: 2 },
+  { code: 'AF_ARG_PN',  label: 'Primera Nacional',  flagCode: 'ar', provider: 'af', afName: 'Primera Nacional',       afCountry: 'Argentina',  country: 'Argentina',  tier: 2 },
+  { code: 'AF_CHI_PD',  label: 'Primera División',  flagCode: 'cl', provider: 'af', afName: 'Primera Division',       afCountry: 'Chile',      country: 'Chile',      tier: 1 },
+  { code: 'AF_CHN_SL',  label: 'Super League',      flagCode: 'cn', provider: 'af', afName: 'Super League',           afCountry: 'China',      country: 'China',      tier: 1 },
+  { code: 'AF_COL_PA',  label: 'Primera A',         flagCode: 'co', provider: 'af', afName: 'Primera A',              afCountry: 'Colombia',   country: 'Colombia',   tier: 1 },
+  { code: 'AF_DEN_SL',  label: 'Superliga',         flagCode: 'dk', provider: 'af', afName: 'Superliga',              afCountry: 'Denmark',    country: 'Denmark',    tier: 1 },
+  { code: 'AF_ECU_LP',  label: 'Liga Pro',          flagCode: 'ec', provider: 'af', afName: 'Liga Pro',               afCountry: 'Ecuador',    country: 'Ecuador',    tier: 1 },
+  { code: 'AF_FIN_VL',  label: 'Veikkausliiga',     flagCode: 'fi', provider: 'af', afName: 'Veikkausliiga',          afCountry: 'Finland',    country: 'Finland',    tier: 1 },
+  { code: 'AF_GRE_SL',  label: 'Super League 1',    flagCode: 'gr', provider: 'af', afName: 'Super League 1',         afCountry: 'Greece',     country: 'Greece',     tier: 1 },
+  { code: 'AF_JPN_J1',  label: 'J1 League',         flagCode: 'jp', provider: 'af', afName: 'J1 League',              afCountry: 'Japan',      country: 'Japan',      tier: 1 },
+  { code: 'AF_KOR_K1',  label: 'K League 1',        flagCode: 'kr', provider: 'af', afName: 'K League 1',             afCountry: 'South Korea',country: 'South Korea',tier: 1 },
+  { code: 'AF_MEX_EX',  label: 'Liga de Expansión', flagCode: 'mx', provider: 'af', afName: 'Liga de Expansion MX',   afCountry: 'Mexico',     country: 'Mexico',     tier: 2 },
+  { code: 'AF_PER_L1',  label: 'Liga 1',            flagCode: 'pe', provider: 'af', afName: 'Liga 1',                 afCountry: 'Peru',       country: 'Peru',       tier: 1 },
+  { code: 'AF_POL_EK',  label: 'Ekstraklasa',       flagCode: 'pl', provider: 'af', afName: 'Ekstraklasa',            afCountry: 'Poland',     country: 'Poland',     tier: 1 },
+  { code: 'AF_POR_L2',  label: 'Liga Portugal 2',   flagCode: 'pt', provider: 'af', afName: 'Liga Portugal 2',        afCountry: 'Portugal',   country: 'Portugal',   tier: 2 },
+  { code: 'AF_UKR_PL',  label: 'Premier League',    flagCode: 'ua', provider: 'af', afName: 'Premier League',         afCountry: 'Ukraine',    country: 'Ukraine',    tier: 1 },
+  { code: 'AF_URU_PD',  label: 'Primera División',  flagCode: 'uy', provider: 'af', afName: 'Primera Division',       afCountry: 'Uruguay',    country: 'Uruguay',    tier: 1 },
 ];
 
 // Sort: England, Spain, Germany, Italy first (in that order), then remaining countries A-Z; tier ascending within each country
@@ -1183,7 +1254,7 @@ function betCardHtml(b) {
       ${oddsHtml(b.oddsMap, b.fix?.fixtureId)}
     </div>
     <div class="bet-right">
-      <span class="bet-league">${b.leagueLabel}</span>
+      <span class="bet-league">${flagImg(b.flagCode)}${b.leagueLabel}</span>
       <span class="bet-diff">+${b.ptsDiff} pts gap</span>
     </div>
   </div>`;
@@ -1429,7 +1500,7 @@ document.getElementById('testing-apply').addEventListener('click', async functio
   loadBets();
 });
 
-function pushRangeBet(betsByDate, m, qualTeam, opponent, isHome, sorted, teamMap, leagueLabel) {
+function pushRangeBet(betsByDate, m, qualTeam, opponent, isHome, sorted, teamMap, leagueLabel, leagueCode) {
   const fixDate  = new Date(m.utcDate);
   const fixDay   = fixDate.toISOString().slice(0, 10);
   const qualRank = sorted.findIndex(t => t.id === qualTeam.id) + 1;
@@ -1449,11 +1520,12 @@ function pushRangeBet(betsByDate, m, qualTeam, opponent, isHome, sorted, teamMap
     ? { hg, ag, homeId: m.homeTeam.id, awayId: m.awayTeam.id }
     : null;
   const fix = { date: m.utcDate, home: isHome, opp: opponent.id, result };
+  const flagCode = (ALL_LEAGUES.find(l => l.code === leagueCode) || {}).flagCode;
   if (!betsByDate[fixDay]) betsByDate[fixDay] = [];
   // Avoid duplicates
   const key = fixDay + qualTeam.id;
   if (!betsByDate[fixDay].some(b => b._key === key)) {
-    betsByDate[fixDay].push({ qualTeam, opponent, homeTeam, awayTeam, isHome, qualRank, oppRank, ptsDiff, dateStr, fixDay, dots, leagueLabel, fix, teamMap, oddsMap: {}, _key: key });
+    betsByDate[fixDay].push({ qualTeam, opponent, homeTeam, awayTeam, isHome, qualRank, oppRank, ptsDiff, dateStr, fixDay, dots, leagueLabel, flagCode, fix, teamMap, oddsMap: {}, _key: key });
   }
 }
 
@@ -1589,10 +1661,10 @@ async function loadBets() {
         if (!home || !away) continue;
 
         if (top3Set.has(hid) && bottom3Set.has(aid)) {
-          pushRangeBet(betsByDate, m, home, away, true, sorted, teamMap, label);
+          pushRangeBet(betsByDate, m, home, away, true, sorted, teamMap, label, code);
         }
         if (top3Set.has(aid) && bottom3Set.has(hid)) {
-          pushRangeBet(betsByDate, m, away, home, false, sorted, teamMap, label);
+          pushRangeBet(betsByDate, m, away, home, false, sorted, teamMap, label, code);
         }
       }
     }
@@ -1666,7 +1738,7 @@ function collectBets(allLeagueData, asOf) {
       }).join('');
       const homeTeam = isHome ? qualTeam : opponent;
       const awayTeam = isHome ? opponent : qualTeam;
-      bets.push({ qualTeam, opponent, homeTeam, awayTeam, isHome, qualRank, oppRank, ptsDiff, dateStr, fixDay, dots, leagueLabel: label, code, fix, teamMap, oddsMap: data.oddsMap });
+      bets.push({ qualTeam, opponent, homeTeam, awayTeam, isHome, qualRank, oppRank, ptsDiff, dateStr, fixDay, dots, leagueLabel: label, flagCode: (ALL_LEAGUES.find(l => l.code === code) || {}).flagCode, code, fix, teamMap, oddsMap: data.oddsMap });
     }
   }
   return bets;
@@ -1691,9 +1763,9 @@ function isLeagueLoaded(code, asOf) {
 
 function updateTabLoadedStates() {
   const asOf = getLeaguesAsOf();
-  document.querySelectorAll('.tab-group-btns .tab').forEach(t => {
-    const loaded = isLeagueLoaded(t.dataset.code, asOf);
-    t.classList.toggle('tab-unloaded', !loaded);
+  document.querySelectorAll('#league-dropdown-panel .dropdown-option').forEach(opt => {
+    const loaded = isLeagueLoaded(opt.dataset.code, asOf);
+    opt.classList.toggle('opt-unloaded', !loaded);
   });
 }
 
@@ -1739,9 +1811,7 @@ async function preloadAllLeagues(asOfOverride) {
      or shows a waiting screen until the preloader reaches it ── */
 async function switchLeague(code) {
   currentLeague = code;
-  document.querySelectorAll('.tab-group-btns .tab').forEach(t =>
-    t.classList.toggle('active', t.dataset.code === code)
-  );
+  updateDropdownSelections(code);
 
   const asOf = getLeaguesAsOf();
   const cacheKey = currentCacheKeyFor(code, asOf);
@@ -1779,30 +1849,100 @@ async function switchLeague(code) {
   }
 }
 
-/* ── Build league tabs ── */
-const tabsEl = document.getElementById('tabs');
-LEAGUE_GROUPS.forEach(group => {
-  const groupWrap = document.createElement('div');
-  groupWrap.className = 'tab-group';
+/* ── Build country/league dropdowns ── */
+const COUNTRIES_LIST = [...new Set(ALL_LEAGUES.map(l => l.country))]
+  .map(country => ({
+    country,
+    flagCode: ALL_LEAGUES.find(l => l.country === country).flagCode,
+    leagues: ALL_LEAGUES.filter(l => l.country === country).sort((a, b) => a.tier - b.tier),
+  }))
+  .sort((a, b) => countrySortKey(a.country) - countrySortKey(b.country) ||
+    (countrySortKey(a.country) === COUNTRY_PRIORITY.length ? a.country.localeCompare(b.country) : 0));
 
-  const groupBtns = document.createElement('div');
-  groupBtns.className = 'tab-group-btns';
-  group.leagues.forEach(l => {
-    const btn = document.createElement('button');
-    btn.className    = 'tab tab-unloaded' + (l.code === currentLeague ? ' active' : '');
-    if (l.flagCode) {
-      btn.innerHTML = `<img class="flag-icon" src="https://flagcdn.com/w20/${l.flagCode}.png" alt="" /> ${l.label}`;
-    } else {
-      btn.textContent = l.label;
-    }
-    btn.dataset.code = l.code;
-    btn.setAttribute('aria-label', `Show ${l.label} form table`);
-    btn.onclick = () => switchLeague(l.code);
-    groupBtns.appendChild(btn);
+let currentCountry = ALL_LEAGUES.find(l => l.code === currentLeague).country;
+
+function flagImg(flagCode) {
+  return flagCode ? `<img class="flag-icon" src="https://flagcdn.com/w20/${flagCode}.png" alt="" />` : '';
+}
+
+function closeAllDropdowns() {
+  document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+}
+
+function renderCountryDropdown() {
+  const btn = document.getElementById('country-dropdown-btn');
+  const panel = document.getElementById('country-dropdown-panel');
+  const current = COUNTRIES_LIST.find(c => c.country === currentCountry);
+  btn.innerHTML = flagImg(current.flagCode) + current.country;
+
+  panel.innerHTML = '';
+  COUNTRIES_LIST.forEach(c => {
+    const opt = document.createElement('div');
+    opt.className = 'dropdown-option' + (c.country === currentCountry ? ' selected' : '');
+    opt.innerHTML = flagImg(c.flagCode) + c.country;
+    opt.onclick = () => {
+      closeAllDropdowns();
+      selectCountry(c.country);
+    };
+    panel.appendChild(opt);
   });
-  groupWrap.appendChild(groupBtns);
-  tabsEl.appendChild(groupWrap);
+}
+
+function renderLeagueDropdown() {
+  const btn = document.getElementById('league-dropdown-btn');
+  const panel = document.getElementById('league-dropdown-panel');
+  const country = COUNTRIES_LIST.find(c => c.country === currentCountry);
+  const currentLeagueDef = ALL_LEAGUES.find(l => l.code === currentLeague);
+
+  btn.innerHTML = flagImg(currentLeagueDef.flagCode) + currentLeagueDef.label;
+  btn.classList.toggle('disabled', country.leagues.length <= 1);
+
+  panel.innerHTML = '';
+  country.leagues.forEach(l => {
+    const asOf = getLeaguesAsOf();
+    const loaded = isLeagueLoaded(l.code, asOf);
+    const opt = document.createElement('div');
+    opt.className = 'dropdown-option' + (l.code === currentLeague ? ' selected' : '') + (loaded ? '' : ' opt-unloaded');
+    opt.dataset.code = l.code;
+    opt.innerHTML = flagImg(l.flagCode) + l.label;
+    opt.onclick = () => {
+      closeAllDropdowns();
+      switchLeague(l.code);
+    };
+    panel.appendChild(opt);
+  });
+}
+
+function updateDropdownSelections(code) {
+  const leagueDef = ALL_LEAGUES.find(l => l.code === code);
+  currentCountry = leagueDef.country;
+  renderCountryDropdown();
+  renderLeagueDropdown();
+}
+
+// Selecting a country auto-picks its top league (or its only league)
+function selectCountry(country) {
+  currentCountry = country;
+  const leagues = COUNTRIES_LIST.find(c => c.country === country).leagues;
+  const target = leagues[0]; // already sorted by tier ascending — tier 1 (or only option) first
+  switchLeague(target.code);
+}
+
+// Wire up dropdown open/close behavior
+['country-dropdown', 'league-dropdown'].forEach(id => {
+  const dropdown = document.getElementById(id);
+  const btn = dropdown.querySelector('.dropdown-btn');
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const wasOpen = dropdown.classList.contains('open');
+    closeAllDropdowns();
+    if (!wasOpen) dropdown.classList.add('open');
+  });
 });
+document.addEventListener('click', closeAllDropdowns);
+
+renderCountryDropdown();
+renderLeagueDropdown();
 
 switchLeague(currentLeague);
 preloadAllLeagues();
