@@ -533,7 +533,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.129</span>
+  <span style="color:var(--border2)">v1.130</span>
 </footer>
 
 <script>
@@ -823,26 +823,34 @@ async function resolveAfLeagueId(afName, afCountry) {
 
   const p = (async () => {
     try {
-      // Try the country name as given first
-      let data = await afApiFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(afCountry)}`);
-      let match = (data.response || [])[0];
+      let match = null;
 
-      // If that fails, resolve the country's canonical name via /countries and retry
+      // Attempt 1: country name as given
+      try {
+        const data = await afApiFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(afCountry)}`);
+        match = (data.response || [])[0] || null;
+      } catch { /* fall through to next attempt */ }
+
+      // Attempt 2: canonical country name via /countries, then retry
       if (!match) {
-        const canonicalCountry = await resolveAfCountryName(afCountry);
-        if (canonicalCountry !== afCountry) {
-          data = await afApiFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(canonicalCountry)}`);
-          match = (data.response || [])[0];
-        }
+        try {
+          const canonicalCountry = await resolveAfCountryName(afCountry);
+          if (canonicalCountry !== afCountry) {
+            const data = await afApiFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(canonicalCountry)}`);
+            match = (data.response || [])[0] || null;
+          }
+        } catch { /* fall through to next attempt */ }
       }
 
-      // Last resort: search by league name alone, filter results by country substring match
+      // Attempt 3: search by league name alone, filter results by country substring match
       if (!match) {
-        data = await afApiFetch(`/leagues?search=${encodeURIComponent(afName)}`);
-        match = (data.response || []).find(r =>
-          r.country?.name?.toLowerCase().includes(afCountry.toLowerCase()) ||
-          afCountry.toLowerCase().includes((r.country?.name || '').toLowerCase())
-        );
+        try {
+          const data = await afApiFetch(`/leagues?search=${encodeURIComponent(afName)}`);
+          match = (data.response || []).find(r =>
+            r.country?.name?.toLowerCase().includes(afCountry.toLowerCase()) ||
+            afCountry.toLowerCase().includes((r.country?.name || '').toLowerCase())
+          ) || null;
+        } catch { /* no more fallbacks left */ }
       }
 
       if (!match) throw new Error(`Could not resolve league id for ${afName} (${afCountry})`);
