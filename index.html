@@ -533,7 +533,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.128</span>
+  <span style="color:var(--border2)">v1.129</span>
 </footer>
 
 <script>
@@ -801,6 +801,21 @@ async function afApiFetch(path, isPreload = false) {
 
 const _inFlightLeagueId = {}; // dedupe concurrent resolveAfLeagueId calls for the same league
 
+const _countryNameCache = {}; // partial country name -> API-Football's canonical name
+
+async function resolveAfCountryName(afCountry) {
+  if (_countryNameCache[afCountry]) return _countryNameCache[afCountry];
+  try {
+    const data = await afApiFetch(`/countries?search=${encodeURIComponent(afCountry)}`);
+    const match = (data.response || [])[0];
+    const canonical = match ? match.name : afCountry;
+    _countryNameCache[afCountry] = canonical;
+    return canonical;
+  } catch {
+    return afCountry; // fall back to whatever we were given
+  }
+}
+
 async function resolveAfLeagueId(afName, afCountry) {
   const key = afCountry + '|' + afName;
   if (afLeagueIdCache[key]) return afLeagueIdCache[key];
@@ -808,8 +823,28 @@ async function resolveAfLeagueId(afName, afCountry) {
 
   const p = (async () => {
     try {
-      const data = await afApiFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(afCountry)}`);
-      const match = (data.response || [])[0];
+      // Try the country name as given first
+      let data = await afApiFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(afCountry)}`);
+      let match = (data.response || [])[0];
+
+      // If that fails, resolve the country's canonical name via /countries and retry
+      if (!match) {
+        const canonicalCountry = await resolveAfCountryName(afCountry);
+        if (canonicalCountry !== afCountry) {
+          data = await afApiFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(canonicalCountry)}`);
+          match = (data.response || [])[0];
+        }
+      }
+
+      // Last resort: search by league name alone, filter results by country substring match
+      if (!match) {
+        data = await afApiFetch(`/leagues?search=${encodeURIComponent(afName)}`);
+        match = (data.response || []).find(r =>
+          r.country?.name?.toLowerCase().includes(afCountry.toLowerCase()) ||
+          afCountry.toLowerCase().includes((r.country?.name || '').toLowerCase())
+        );
+      }
+
       if (!match) throw new Error(`Could not resolve league id for ${afName} (${afCountry})`);
       afLeagueIdCache[key] = match.league.id;
       return match.league.id;
