@@ -92,9 +92,40 @@ function bestBetCutoff(teamCount) {
   return teamCount <= 16 ? 2 : 3;
 }
 
+const _countryNameCache = {};
+async function resolveCountryName(afCountry) {
+  if (_countryNameCache[afCountry]) return _countryNameCache[afCountry];
+  try {
+    const data = await afFetch(`/countries?search=${encodeURIComponent(afCountry)}`);
+    const match = (data.response || [])[0];
+    const canonical = match ? match.name : afCountry;
+    _countryNameCache[afCountry] = canonical;
+    return canonical;
+  } catch {
+    return afCountry;
+  }
+}
+
 async function resolveLeagueId(afName, afCountry) {
-  const data = await afFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(afCountry)}`);
-  const match = (data.response || [])[0];
+  let data = await afFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(afCountry)}`);
+  let match = (data.response || [])[0];
+
+  if (!match) {
+    const canonicalCountry = await resolveCountryName(afCountry);
+    if (canonicalCountry !== afCountry) {
+      data = await afFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(canonicalCountry)}`);
+      match = (data.response || [])[0];
+    }
+  }
+
+  if (!match) {
+    data = await afFetch(`/leagues?search=${encodeURIComponent(afName)}`);
+    match = (data.response || []).find(r =>
+      r.country?.name?.toLowerCase().includes(afCountry.toLowerCase()) ||
+      afCountry.toLowerCase().includes((r.country?.name || '').toLowerCase())
+    );
+  }
+
   if (!match) throw new Error(`Could not resolve ${afName} (${afCountry})`);
   return match.league.id;
 }
