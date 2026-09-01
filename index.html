@@ -533,7 +533,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.130</span>
+  <span style="color:var(--border2)">v1.131</span>
 </footer>
 
 <script>
@@ -850,6 +850,27 @@ async function resolveAfLeagueId(afName, afCountry) {
             r.country?.name?.toLowerCase().includes(afCountry.toLowerCase()) ||
             afCountry.toLowerCase().includes((r.country?.name || '').toLowerCase())
           ) || null;
+        } catch { /* fall through to next attempt */ }
+      }
+
+      // Attempt 4: fetch ALL leagues for the country (no name filter) and fuzzy-match —
+      // catches cases where the league's actual name differs from what we expected
+      // (e.g. "Ukrainian Premier League" vs our "Premier League")
+      if (!match) {
+        try {
+          const canonicalCountry = await resolveAfCountryName(afCountry);
+          const data = await afApiFetch(`/leagues?country=${encodeURIComponent(canonicalCountry)}`);
+          const all = data.response || [];
+          const nameLow = afName.toLowerCase();
+          // Try a fuzzy name match first (either direction)
+          match = all.find(r => {
+            const rn = (r.league?.name || '').toLowerCase();
+            return rn.includes(nameLow) || nameLow.includes(rn);
+          }) || null;
+          // Otherwise fall back to the top-flight league — first entry of type "League"
+          if (!match) {
+            match = all.find(r => r.league?.type === 'League') || all[0] || null;
+          }
         } catch { /* no more fallbacks left */ }
       }
 
