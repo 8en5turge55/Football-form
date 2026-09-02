@@ -533,7 +533,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.132</span>
+  <span style="color:var(--border2)">v1.133</span>
 </footer>
 
 <script>
@@ -805,13 +805,30 @@ const _countryNameCache  = {}; // partial country name -> API-Football's canonic
 const _countryLeaguesCache = {}; // canonical country name -> full list of that country's leagues
 const _inFlightCountryLeagues = {};
 
-async function resolveAfCountryName(afCountry) {
-  if (_countryNameCache[afCountry]) return _countryNameCache[afCountry];
+async function resolveAfCountryName(afCountry, isoCode) {
+  const cacheKey = isoCode || afCountry;
+  if (_countryNameCache[cacheKey]) return _countryNameCache[cacheKey];
+
+  // Prefer exact ISO code lookup — reliable regardless of naming differences
+  // (e.g. our "South Korea" vs their "Korea Republic"). Skip for non-standard
+  // codes like our UK subdivision flags (gb-eng, gb-sct), which aren't real
+  // ISO country codes and would fail this lookup.
+  if (isoCode && /^[a-z]{2}$/i.test(isoCode)) {
+    try {
+      const data = await afApiFetch(`/countries?code=${encodeURIComponent(isoCode.toUpperCase())}`);
+      const match = (data.response || [])[0];
+      if (match) {
+        _countryNameCache[cacheKey] = match.name;
+        return match.name;
+      }
+    } catch { /* fall through to name search */ }
+  }
+
   try {
     const data = await afApiFetch(`/countries?search=${encodeURIComponent(afCountry)}`);
     const match = (data.response || [])[0];
     const canonical = match ? match.name : afCountry;
-    _countryNameCache[afCountry] = canonical;
+    _countryNameCache[cacheKey] = canonical;
     return canonical;
   } catch {
     return afCountry; // fall back to whatever we were given
@@ -821,8 +838,8 @@ async function resolveAfCountryName(afCountry) {
 // Fetch a country's full league list ONCE and cache it — every league belonging
 // to that country (e.g. England has 5) shares this single result, cutting total
 // API calls dramatically compared to resolving each league independently.
-async function fetchCountryLeagues(afCountry) {
-  const canonicalCountry = await resolveAfCountryName(afCountry);
+async function fetchCountryLeagues(afCountry, isoCode) {
+  const canonicalCountry = await resolveAfCountryName(afCountry, isoCode);
   if (_countryLeaguesCache[canonicalCountry]) return _countryLeaguesCache[canonicalCountry];
   if (_inFlightCountryLeagues[canonicalCountry]) return _inFlightCountryLeagues[canonicalCountry];
 
@@ -840,14 +857,14 @@ async function fetchCountryLeagues(afCountry) {
   return p;
 }
 
-async function resolveAfLeagueId(afName, afCountry) {
+async function resolveAfLeagueId(afName, afCountry, isoCode) {
   const key = afCountry + '|' + afName;
   if (afLeagueIdCache[key]) return afLeagueIdCache[key];
   if (_inFlightLeagueId[key]) return _inFlightLeagueId[key];
 
   const p = (async () => {
     try {
-      const all = await fetchCountryLeagues(afCountry);
+      const all = await fetchCountryLeagues(afCountry, isoCode);
       const nameLow = afName.toLowerCase();
 
       // Prefer an exact name match, then a fuzzy substring match (either direction),
@@ -904,7 +921,7 @@ async function fetchAfOddsForLeague(leagueId, season, isPreload) {
 
 async function fetchRawApiFootball(leagueDef, asOf, isPreload) {
   const season = seasonYearForDate(asOf);
-  const leagueId = await resolveAfLeagueId(leagueDef.afName, leagueDef.afCountry);
+  const leagueId = await resolveAfLeagueId(leagueDef.afName, leagueDef.afCountry, leagueDef.flagCode);
 
   const standRes = await afApiFetch(`/standings?league=${leagueId}&season=${season}`, isPreload);
   const standingsGroup = standRes.response?.[0]?.league?.standings?.[0] || [];
