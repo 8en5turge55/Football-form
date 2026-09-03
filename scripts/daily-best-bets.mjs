@@ -20,37 +20,56 @@ if (!AF_KEY || !RESEND_KEY || !EMAIL_TO) {
 }
 
 // Full league list — kept in sync with index.html's ALL_LEAGUES
+// isoCode is the country's ISO 3166-1 alpha-2 code, used for reliable country
+// resolution via /countries?code= (falls back to fuzzy name search when absent)
 const LEAGUES = [
-  { code: 'AF_ENG_PL',  label: 'Premier League',    afName: 'Premier League',    afCountry: 'England' },
-  { code: 'AF_ENG_CH',  label: 'Championship',      afName: 'Championship',      afCountry: 'England' },
-  { code: 'AF_ENG_L1',  label: 'League One',        afName: 'League One',        afCountry: 'England' },
-  { code: 'AF_ENG_L2',  label: 'League Two',        afName: 'League Two',        afCountry: 'England' },
-  { code: 'AF_ENG_NL',  label: 'National League',   afName: 'National League',   afCountry: 'England' },
-  { code: 'AF_ESP_LL',  label: 'La Liga',           afName: 'La Liga',           afCountry: 'Spain' },
-  { code: 'AF_ESP_SD',  label: 'Segunda División',  afName: 'Segunda Division',  afCountry: 'Spain' },
-  { code: 'AF_GER_BL',  label: 'Bundesliga',        afName: 'Bundesliga',    afCountry: 'Germany' },
-  { code: 'AF_GER_2BL', label: '2. Bundesliga',     afName: '2. Bundesliga', afCountry: 'Germany' },
-  { code: 'AF_GER_3L',  label: '3. Liga',           afName: '3. Liga',       afCountry: 'Germany' },
-  { code: 'AF_ITA_SA',  label: 'Serie A',           afName: 'Serie A', afCountry: 'Italy' },
-  { code: 'AF_ITA_SB',  label: 'Serie B',           afName: 'Serie B', afCountry: 'Italy' },
-  { code: 'AF_ITA_SC',  label: 'Serie C',           afName: 'Serie C', afCountry: 'Italy' },
-  { code: 'AF_BRA_SA',  label: 'Brasileirão',       afName: 'Serie A',    afCountry: 'Brazil' },
-  { code: 'AF_FRA_L1',  label: 'Ligue 1',           afName: 'Ligue 1',    afCountry: 'France' },
-  { code: 'AF_FRA_L2',  label: 'Ligue 2',           afName: 'Ligue 2',    afCountry: 'France' },
-  { code: 'AF_NED_ED',  label: 'Eredivisie',        afName: 'Eredivisie',     afCountry: 'Netherlands' },
-  { code: 'AF_NED_ED2', label: 'Eerste Divisie',    afName: 'Eerste Divisie', afCountry: 'Netherlands' },
-  { code: 'AF_POR_PL',  label: 'Primeira Liga',     afName: 'Primeira Liga', afCountry: 'Portugal' },
-  { code: 'AF_ARG_LP',  label: 'Liga Profesional',  afName: 'Liga Profesional Argentina', afCountry: 'Argentina' },
-  { code: 'AF_AUT_BL',  label: 'Bundesliga (AUT)',  afName: 'Bundesliga',      afCountry: 'Austria' },
-  { code: 'AF_BEL_PL',  label: 'Pro League',        afName: 'Jupiler Pro League', afCountry: 'Belgium' },
-  { code: 'AF_CRO_HNL', label: 'HNL',               afName: 'HNL',             afCountry: 'Croatia' },
-  { code: 'AF_MEX_LM',  label: 'Liga MX',           afName: 'Liga MX',         afCountry: 'Mexico' },
-  { code: 'AF_SCO_PR',  label: 'Premiership',       afName: 'Premiership',   afCountry: 'Scotland' },
-  { code: 'AF_SCO_CH',  label: 'Championship (SCO)',afName: 'Championship',  afCountry: 'Scotland' },
-  { code: 'AF_SWE_AS',  label: 'Allsvenskan',       afName: 'Allsvenskan',     afCountry: 'Sweden' },
-  { code: 'AF_TUR_SL',  label: 'Süper Lig',         afName: 'Super Lig',       afCountry: 'Turkey' },
-  { code: 'AF_USA_MLS', label: 'MLS',               afName: 'Major League Soccer', afCountry: 'USA' },
-  { code: 'AF_SUI_SL',  label: 'Super League',      afName: 'Super League',    afCountry: 'Switzerland' },
+  { code: 'AF_ENG_PL',  label: 'Premier League',    afName: 'Premier League',    afCountry: 'England', isoCode: null },
+  { code: 'AF_ENG_CH',  label: 'Championship',      afName: 'Championship',      afCountry: 'England', isoCode: null },
+  { code: 'AF_ENG_L1',  label: 'League One',        afName: 'League One',        afCountry: 'England', isoCode: null },
+  { code: 'AF_ENG_L2',  label: 'League Two',        afName: 'League Two',        afCountry: 'England', isoCode: null },
+  { code: 'AF_ENG_NL',  label: 'National League',   afName: 'National League',   afCountry: 'England', isoCode: null },
+  { code: 'AF_ESP_LL',  label: 'La Liga',           afName: 'La Liga',           afCountry: 'Spain', isoCode: 'es' },
+  { code: 'AF_ESP_SD',  label: 'Segunda División',  afName: 'Segunda Division',  afCountry: 'Spain', isoCode: 'es' },
+  { code: 'AF_GER_BL',  label: 'Bundesliga',        afName: 'Bundesliga',    afCountry: 'Germany', isoCode: 'de' },
+  { code: 'AF_GER_2BL', label: '2. Bundesliga',     afName: '2. Bundesliga', afCountry: 'Germany', isoCode: 'de' },
+  { code: 'AF_GER_3L',  label: '3. Liga',           afName: '3. Liga',       afCountry: 'Germany', isoCode: 'de' },
+  { code: 'AF_ITA_SA',  label: 'Serie A',           afName: 'Serie A', afCountry: 'Italy', isoCode: 'it' },
+  { code: 'AF_ITA_SB',  label: 'Serie B',           afName: 'Serie B', afCountry: 'Italy', isoCode: 'it' },
+  { code: 'AF_ITA_SC',  label: 'Serie C',           afName: 'Serie C', afCountry: 'Italy', isoCode: 'it' },
+  { code: 'AF_BRA_SA',  label: 'Brasileirão',       afName: 'Serie A',    afCountry: 'Brazil', isoCode: 'br' },
+  { code: 'AF_BRA_SB',  label: 'Serie B',           afName: 'Serie B',    afCountry: 'Brazil', isoCode: 'br' },
+  { code: 'AF_FRA_L1',  label: 'Ligue 1',           afName: 'Ligue 1',    afCountry: 'France', isoCode: 'fr' },
+  { code: 'AF_FRA_L2',  label: 'Ligue 2',           afName: 'Ligue 2',    afCountry: 'France', isoCode: 'fr' },
+  { code: 'AF_NED_ED',  label: 'Eredivisie',        afName: 'Eredivisie',     afCountry: 'Netherlands', isoCode: 'nl' },
+  { code: 'AF_NED_ED2', label: 'Eerste Divisie',    afName: 'Eerste Divisie', afCountry: 'Netherlands', isoCode: 'nl' },
+  { code: 'AF_POR_PL',  label: 'Primeira Liga',     afName: 'Primeira Liga', afCountry: 'Portugal', isoCode: 'pt' },
+  { code: 'AF_POR_L2',  label: 'Liga Portugal 2',   afName: 'Liga Portugal 2', afCountry: 'Portugal', isoCode: 'pt' },
+  { code: 'AF_ARG_LP',  label: 'Liga Profesional',  afName: 'Liga Profesional Argentina', afCountry: 'Argentina', isoCode: 'ar' },
+  { code: 'AF_ARG_PN',  label: 'Primera Nacional',  afName: 'Primera Nacional', afCountry: 'Argentina', isoCode: 'ar' },
+  { code: 'AF_AUT_BL',  label: 'Bundesliga (AUT)',  afName: 'Bundesliga',      afCountry: 'Austria', isoCode: 'at' },
+  { code: 'AF_BEL_PL',  label: 'Pro League',        afName: 'Jupiler Pro League', afCountry: 'Belgium', isoCode: 'be' },
+  { code: 'AF_CRO_HNL', label: 'HNL',               afName: 'HNL',             afCountry: 'Croatia', isoCode: 'hr' },
+  { code: 'AF_MEX_LM',  label: 'Liga MX',           afName: 'Liga MX',         afCountry: 'Mexico', isoCode: 'mx' },
+  { code: 'AF_MEX_EX',  label: 'Liga de Expansión', afName: 'Liga de Expansion MX', afCountry: 'Mexico', isoCode: 'mx' },
+  { code: 'AF_SCO_PR',  label: 'Premiership',       afName: 'Premiership',   afCountry: 'Scotland', isoCode: null },
+  { code: 'AF_SCO_CH',  label: 'Championship (SCO)',afName: 'Championship',  afCountry: 'Scotland', isoCode: null },
+  { code: 'AF_SWE_AS',  label: 'Allsvenskan',       afName: 'Allsvenskan',     afCountry: 'Sweden', isoCode: 'se' },
+  { code: 'AF_TUR_SL',  label: 'Süper Lig',         afName: 'Super Lig',       afCountry: 'Turkey', isoCode: 'tr' },
+  { code: 'AF_USA_MLS', label: 'MLS',               afName: 'Major League Soccer', afCountry: 'USA', isoCode: 'us' },
+  { code: 'AF_SUI_SL',  label: 'Super League',      afName: 'Super League',    afCountry: 'Switzerland', isoCode: 'ch' },
+  { code: 'AF_CHI_PD',  label: 'Primera División',  afName: 'Primera Division', afCountry: 'Chile', isoCode: 'cl' },
+  { code: 'AF_CHN_SL',  label: 'Super League',      afName: 'Super League',    afCountry: 'China', isoCode: 'cn' },
+  { code: 'AF_COL_PA',  label: 'Primera A',         afName: 'Primera A',       afCountry: 'Colombia', isoCode: 'co' },
+  { code: 'AF_DEN_SL',  label: 'Superliga',         afName: 'Superliga',       afCountry: 'Denmark', isoCode: 'dk' },
+  { code: 'AF_ECU_LP',  label: 'Liga Pro',          afName: 'Liga Pro',        afCountry: 'Ecuador', isoCode: 'ec' },
+  { code: 'AF_FIN_VL',  label: 'Veikkausliiga',     afName: 'Veikkausliiga',   afCountry: 'Finland', isoCode: 'fi' },
+  { code: 'AF_GRE_SL',  label: 'Super League 1',    afName: 'Super League 1',  afCountry: 'Greece', isoCode: 'gr' },
+  { code: 'AF_JPN_J1',  label: 'J1 League',         afName: 'J1 League',       afCountry: 'Japan', isoCode: 'jp' },
+  { code: 'AF_KOR_K1',  label: 'K League 1',        afName: 'K League 1',      afCountry: 'South Korea', isoCode: 'kr' },
+  { code: 'AF_PER_L1',  label: 'Liga 1',            afName: 'Liga 1',          afCountry: 'Peru', isoCode: 'pe' },
+  { code: 'AF_POL_EK',  label: 'Ekstraklasa',       afName: 'Ekstraklasa',     afCountry: 'Poland', isoCode: 'pl' },
+  { code: 'AF_UKR_PL',  label: 'Premier League',    afName: 'Premier League',  afCountry: 'Ukraine', isoCode: 'ua' },
+  { code: 'AF_URU_PD',  label: 'Primera División',  afName: 'Primera Division', afCountry: 'Uruguay', isoCode: 'uy' },
 ];
 
 // ── Paced fetch with retry-with-backoff on rate-limit errors ──
@@ -93,37 +112,57 @@ function bestBetCutoff(teamCount) {
 }
 
 const _countryNameCache = {};
-async function resolveCountryName(afCountry) {
-  if (_countryNameCache[afCountry]) return _countryNameCache[afCountry];
+async function resolveCountryName(afCountry, isoCode) {
+  const cacheKey = isoCode || afCountry;
+  if (_countryNameCache[cacheKey]) return _countryNameCache[cacheKey];
+
+  if (isoCode && /^[a-z]{2}$/i.test(isoCode)) {
+    try {
+      const data = await afFetch(`/countries?code=${encodeURIComponent(isoCode.toUpperCase())}`);
+      const match = (data.response || [])[0];
+      if (match) {
+        _countryNameCache[cacheKey] = match.name;
+        return match.name;
+      }
+    } catch { /* fall through to name search */ }
+  }
+
   try {
     const data = await afFetch(`/countries?search=${encodeURIComponent(afCountry)}`);
     const match = (data.response || [])[0];
     const canonical = match ? match.name : afCountry;
-    _countryNameCache[afCountry] = canonical;
+    _countryNameCache[cacheKey] = canonical;
     return canonical;
   } catch {
     return afCountry;
   }
 }
 
-async function resolveLeagueId(afName, afCountry) {
-  let data = await afFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(afCountry)}`);
-  let match = (data.response || [])[0];
+// Fetch a country's full league list ONCE and cache it — every league belonging
+// to that country shares this single result, cutting total API calls dramatically.
+const _countryLeaguesCache = {};
+async function fetchCountryLeagues(afCountry, isoCode) {
+  const canonicalCountry = await resolveCountryName(afCountry, isoCode);
+  if (_countryLeaguesCache[canonicalCountry]) return _countryLeaguesCache[canonicalCountry];
+  const data = await afFetch(`/leagues?country=${encodeURIComponent(canonicalCountry)}`);
+  const all = data.response || [];
+  _countryLeaguesCache[canonicalCountry] = all;
+  return all;
+}
 
+async function resolveLeagueId(afName, afCountry, isoCode) {
+  const all = await fetchCountryLeagues(afCountry, isoCode);
+  const nameLow = afName.toLowerCase();
+
+  let match = all.find(r => (r.league?.name || '').toLowerCase() === nameLow) || null;
   if (!match) {
-    const canonicalCountry = await resolveCountryName(afCountry);
-    if (canonicalCountry !== afCountry) {
-      data = await afFetch(`/leagues?name=${encodeURIComponent(afName)}&country=${encodeURIComponent(canonicalCountry)}`);
-      match = (data.response || [])[0];
-    }
+    match = all.find(r => {
+      const rn = (r.league?.name || '').toLowerCase();
+      return rn.includes(nameLow) || nameLow.includes(rn);
+    }) || null;
   }
-
   if (!match) {
-    data = await afFetch(`/leagues?search=${encodeURIComponent(afName)}`);
-    match = (data.response || []).find(r =>
-      r.country?.name?.toLowerCase().includes(afCountry.toLowerCase()) ||
-      afCountry.toLowerCase().includes((r.country?.name || '').toLowerCase())
-    );
+    match = all.find(r => r.league?.type === 'League') || all[0] || null;
   }
 
   if (!match) throw new Error(`Could not resolve ${afName} (${afCountry})`);
@@ -132,7 +171,7 @@ async function resolveLeagueId(afName, afCountry) {
 
 async function loadLeagueBestBets(leagueDef, asOf) {
   const season = seasonYearForDate(asOf);
-  const leagueId = await resolveLeagueId(leagueDef.afName, leagueDef.afCountry);
+  const leagueId = await resolveLeagueId(leagueDef.afName, leagueDef.afCountry, leagueDef.isoCode);
 
   const standRes = await afFetch(`/standings?league=${leagueId}&season=${season}`);
   const standingsGroup = standRes.response?.[0]?.league?.standings?.[0] || [];
