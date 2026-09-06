@@ -436,13 +436,46 @@
     }
 
     /* Responsive */
-    @media (max-width: 600px) {
+    @media (max-width: 640px) {
       header { padding: 1rem; }
       .container { padding: 1rem 1rem 3rem; }
-      footer { padding: 1rem; }
-      .col-team { width: 120px; }
-      .col-wdl  { display: none; }
+      footer { padding: 1rem; flex-direction: column; gap: 4px; }
       .bet-right { display: none; }
+
+      /* Stack the form table into per-team cards instead of a wide horizontal row */
+      .table-wrap table { display: block; width: 100%; }
+      .table-wrap thead { display: none; }
+      .table-wrap tbody { display: block; }
+      .table-wrap tr {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        grid-template-areas:
+          "rank team pts"
+          "form form form"
+          "fix  fix  fix"
+          "odds odds odds";
+        column-gap: 8px;
+        row-gap: 5px;
+        padding: 10px 4px;
+        border-bottom: 1px solid var(--border);
+      }
+      .table-wrap td {
+        display: block;
+        padding: 0;
+        border-bottom: none;
+        white-space: normal;
+        overflow: visible;
+        max-width: none;
+      }
+      .table-wrap td.col-rank { grid-area: rank; }
+      .table-wrap td.col-team { grid-area: team; }
+      .table-wrap td.col-pts  { grid-area: pts; text-align: right; }
+      .table-wrap td.col-wdl  { display: none; }
+      .table-wrap td.col-form { grid-area: form; }
+      .table-wrap td.col-fix  { grid-area: fix; }
+      .table-wrap td.col-odds { grid-area: odds; }
+      .table-wrap td.col-odds:empty { display: none; }
+      .table-wrap td.col-fix:empty { display: none; }
     }
     @media (prefers-reduced-motion: reduce) {
       .spinner { animation: none; opacity: 0.5; }
@@ -533,7 +566,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.133</span>
+  <span style="color:var(--border2)">v1.134</span>
 </footer>
 
 <script>
