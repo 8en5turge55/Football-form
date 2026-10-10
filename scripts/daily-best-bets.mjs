@@ -70,6 +70,9 @@ const LEAGUES = [
   { code: 'AF_POL_EK',  label: 'Ekstraklasa',       afName: 'Ekstraklasa',     afCountry: 'Poland', isoCode: 'pl' },
   { code: 'AF_UKR_PL',  label: 'Premier League',    afName: 'Premier League',  afCountry: 'Ukraine', isoCode: 'ua' },
   { code: 'AF_URU_PD',  label: 'Primera División',  afName: 'Primera Division', afCountry: 'Uruguay', isoCode: 'uy' },
+  { code: 'AF_SAU_PL',  label: 'Pro League',  afName: 'Pro League',  afCountry: 'Saudi Arabia',   isoCode: 'sa' },
+  { code: 'AF_NOR_EL',  label: 'Eliteserien', afName: 'Eliteserien', afCountry: 'Norway',         isoCode: 'no' },
+  { code: 'AF_CZE_FL',  label: 'Czech Liga',  afName: 'Czech Liga',  afCountry: 'Czech Republic', isoCode: 'cz' },
 ];
 
 // ── Paced fetch with retry-with-backoff on rate-limit errors ──
