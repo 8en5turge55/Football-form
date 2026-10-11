@@ -448,14 +448,14 @@
       .table-wrap tbody { display: block; }
       .table-wrap tr {
         display: grid;
-        grid-template-columns: auto 1fr auto;
+        grid-template-columns: auto minmax(0, 1fr) auto auto;
         grid-template-areas:
-          "rank team pts"
-          "form form form"
-          "fix  fix  fix"
-          "odds odds odds";
+          "rank team form pts"
+          "fix  fix  fix  fix"
+          "odds odds odds odds";
         column-gap: 8px;
-        row-gap: 5px;
+        row-gap: 0;
+        align-items: center;
         padding: 10px 4px;
         border-bottom: 1px solid var(--border);
       }
@@ -468,14 +468,17 @@
         max-width: none;
       }
       .table-wrap td.col-rank { grid-area: rank; }
-      .table-wrap td.col-team { grid-area: team; }
-      .table-wrap td.col-pts  { grid-area: pts; text-align: right; }
-      .table-wrap td.col-wdl  { display: none; }
+      .table-wrap td.col-team { grid-area: team; min-width: 0; }
+      .table-wrap td.col-team .team-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .table-wrap td.col-form { grid-area: form; }
-      .table-wrap td.col-fix  { grid-area: fix; }
-      .table-wrap td.col-odds { grid-area: odds; }
+      .table-wrap td.col-pts  { grid-area: pts; text-align: right; white-space: nowrap; }
+      .table-wrap td.col-pts::before { content: 'PTS: '; color: var(--muted); font-size: 11px; }
+      .table-wrap td.col-wdl  { display: none; }
+      .table-wrap td.col-fix  { grid-area: fix; margin-top: 6px; }
+      .table-wrap td.col-fix::before { content: 'Next: '; color: var(--muted); font-size: 11px; margin-right: 2px; }
+      .table-wrap td.col-fix.no-fix { display: none; }
+      .table-wrap td.col-odds { grid-area: odds; margin-top: 6px; }
       .table-wrap td.col-odds:empty { display: none; }
-      .table-wrap td.col-fix:empty { display: none; }
     }
     @media (prefers-reduced-motion: reduce) {
       .spinner { animation: none; opacity: 0.5; }
@@ -566,7 +569,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.135</span>
+  <span style="color:var(--border2)">v1.136</span>
 </footer>
 
 <script>
@@ -1300,7 +1303,7 @@ function render(code, data) {
       <td class="col-wdl r"><span class="wdl-val">${t.formD}</span></td>
       <td class="col-wdl r"><span class="wdl-val">${t.formL}</span></td>
       <td class="col-form"><div class="dots">${dots || '<span style="color:var(--muted);font-size:11px">no data</span>'}</div></td>
-      <td class="col-fix">${badge}${bestBetIds.has(t.id) ? '&nbsp;<span title="Best Bet" style="font-size:13px">💷</span>' : ''}</td>
+      <td class="col-fix${fix && opp && c ? '' : ' no-fix'}">${badge}${bestBetIds.has(t.id) ? '&nbsp;<span title="Best Bet" style="font-size:13px">💷</span>' : ''}</td>
       <td class="col-odds">${fix && opp && c ? oddsHtml(data.oddsMap, fix.fixtureId) : ''}</td>
     </tr>`;
   }).join('');
