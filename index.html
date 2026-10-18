@@ -453,7 +453,7 @@
           "rank team form pts"
           "fix  fix  fix  fix"
           "odds odds odds odds";
-        column-gap: 8px;
+        column-gap: 0;
         row-gap: 0;
         align-items: center;
         padding: 10px 4px;
@@ -467,7 +467,10 @@
         overflow: visible;
         max-width: none;
       }
-      .table-wrap td.col-rank { grid-area: rank; }
+      .table-wrap td.col-rank { grid-area: rank; align-self: stretch; display: flex; align-items: center; padding: 4px 8px 4px 6px; }
+      .table-wrap td.col-team { align-self: stretch; display: flex; align-items: center; padding: 4px 8px 4px 0; }
+      .table-wrap td.col-form { align-self: stretch; display: flex; align-items: center; padding: 4px 8px 4px 0; background: var(--pair-bg, transparent); }
+      .table-wrap td.col-pts  { padding-left: 8px; }
       .table-wrap td.col-team { grid-area: team; min-width: 0; }
       .table-wrap td.col-team .team-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .table-wrap td.col-form { grid-area: form; }
@@ -569,7 +572,7 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.136</span>
+  <span style="color:var(--border2)">v1.137</span>
 </footer>
 
 <script>
@@ -1302,7 +1305,7 @@ function render(code, data) {
       <td class="col-wdl r"><span class="wdl-val">${t.formW}</span></td>
       <td class="col-wdl r"><span class="wdl-val">${t.formD}</span></td>
       <td class="col-wdl r"><span class="wdl-val">${t.formL}</span></td>
-      <td class="col-form"><div class="dots">${dots || '<span style="color:var(--muted);font-size:11px">no data</span>'}</div></td>
+      <td class="col-form" ${c ? `style="--pair-bg:${c.bg}"` : ''}><div class="dots">${dots || '<span style="color:var(--muted);font-size:11px">no data</span>'}</div></td>
       <td class="col-fix${fix && opp && c ? '' : ' no-fix'}">${badge}${bestBetIds.has(t.id) ? '&nbsp;<span title="Best Bet" style="font-size:13px">💷</span>' : ''}</td>
       <td class="col-odds">${fix && opp && c ? oddsHtml(data.oddsMap, fix.fixtureId) : ''}</td>
     </tr>`;
