@@ -254,7 +254,7 @@ async function loadLeagueBestBets(leagueDef, asOf) {
     const qualRank = sorted.findIndex(t => t.id === qualTeam.id) + 1;
     const oppRank  = sorted.findIndex(t => t.id === opponent.id) + 1;
     bets.push({
-      league: leagueDef.label,
+      league: `${leagueDef.afCountry} ${leagueDef.label}`,
       home: fix.home ? qualTeam.name : opponent.name,
       away: fix.home ? opponent.name : qualTeam.name,
       isHome: fix.home,
