@@ -332,6 +332,21 @@
     }
     .bets-loading { padding: 2rem 0; color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 8px; }
     .bets-empty   { padding: 2rem 0; color: var(--muted); font-size: 13px; }
+    .bets-day-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
+    .day-btn {
+      padding: 5px 12px; background: var(--surface2); color: var(--muted);
+      border: 1px solid var(--border2); border-radius: var(--radius);
+      font-family: var(--mono); font-size: 12px; cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .day-btn:hover { border-color: var(--accent); color: var(--text); }
+    .day-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
+    #bets-day-date {
+      background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius);
+      color: var(--text); font-family: var(--mono); font-size: 12px; padding: 4px 7px; outline: none;
+    }
+    #bets-day-date:focus { border-color: var(--accent); }
+    #bets-day-date::-webkit-calendar-picker-indicator { filter: invert(0.6); cursor: pointer; }
     .bet-card {
       display: grid;
       grid-template-columns: 1fr auto;
@@ -564,6 +579,13 @@
       whose next fixture is at <strong style="color:#4ade80">HOME</strong> or <strong style="color:#60a5fa">AWAY</strong> against a team in the <strong style="color:var(--text)">bottom 3</strong>.
       Sorted by form points gap, highest first.
     </p>
+    <div class="bets-day-filter" id="bets-day-filter">
+      <button type="button" class="day-btn active" data-day="all">Show all</button>
+      <button type="button" class="day-btn" data-day="today">Today</button>
+      <button type="button" class="day-btn" data-day="tomorrow">Tomorrow</button>
+      <button type="button" class="day-btn" data-day="date" id="bets-day-select-btn">Select date</button>
+      <input type="date" id="bets-day-date" style="display:none" />
+    </div>
     <div id="bets-content">
       <div class="status"><span class="spinner"></span> Loading all leagues…</div>
     </div>
@@ -575,7 +597,7 @@
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
   <a href="#" id="refresh-data-link" style="color:var(--muted,inherit);text-decoration:underline" title="Discard saved data (kept for 8 hours) and reload everything">↻ Refresh data</a>
-  <span style="color:var(--border2)">v1.139</span>
+  <span style="color:var(--border2)">v1.140</span>
 </footer>
 
 <script>
@@ -1552,20 +1574,76 @@ function analyticsHtml(bets) {
 }
 
 /* ── Best Bets renderer (live mode) ── */
+let _liveBets = [];
+let betsDayFilter = 'all';   // 'all' | 'today' | 'tomorrow' | 'date'
+
+// Local calendar day (YYYY-MM-DD) of a Date — matches how kickoff dates are shown on the cards
+function localDayKey(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
 function renderBets(bets) {
+  _liveBets = bets;
+  renderLiveBets();
+  document.getElementById('last-updated').textContent =
+    'Updated ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Renders the live best bets list, applying the Show all / Today / Tomorrow / Select date filter
+function renderLiveBets() {
   const formLabelEl = document.getElementById('bets-form-label');
   if (formLabelEl) formLabelEl.textContent = `last ${formWindow}`;
   const el = document.getElementById('bets-content');
+  const bets = _liveBets;
   if (bets.length === 0) {
     el.innerHTML = '<p class="bets-empty">No matches found right now — check back closer to the next round of fixtures.</p>';
     return;
   }
+  let shown = bets;
+  let dayLabel = '';
+  if (betsDayFilter !== 'all') {
+    let target;
+    if (betsDayFilter === 'today') {
+      target = localDayKey(new Date()); dayLabel = 'today';
+    } else if (betsDayFilter === 'tomorrow') {
+      const t = new Date(); t.setDate(t.getDate() + 1);
+      target = localDayKey(t); dayLabel = 'tomorrow';
+    } else {
+      target = document.getElementById('bets-day-date').value; dayLabel = 'the selected date';
+    }
+    shown = target ? bets.filter(b => localDayKey(new Date(b.fix.date)) === target) : [];
+    if (betsDayFilter === 'date' && !target) {
+      el.innerHTML = '<p class="bets-empty">Pick a date above to see its best bets.</p>';
+      return;
+    }
+    if (shown.length === 0) {
+      el.innerHTML = `<p class="bets-empty">No best bets scheduled for ${dayLabel}.</p>`;
+      return;
+    }
+  }
   // Sort by pts diff descending in live mode
-  bets.sort((a, b) => b.ptsDiff - a.ptsDiff);
-  el.innerHTML = bets.map(betCardHtml).join('');
-  document.getElementById('last-updated').textContent =
-    'Updated ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  shown = shown.slice().sort((a, b) => b.ptsDiff - a.ptsDiff);
+  el.innerHTML = shown.map(betCardHtml).join('');
 }
+
+function setBetsDayFilter(mode) {
+  betsDayFilter = mode;
+  document.querySelectorAll('#bets-day-filter .day-btn').forEach(b => b.classList.toggle('active', b.dataset.day === mode));
+  const dateInput = document.getElementById('bets-day-date');
+  dateInput.style.display = mode === 'date' ? '' : 'none';
+  if (mode === 'date' && !dateInput.value) dateInput.value = localDayKey(new Date());
+  if (!testingMode) renderLiveBets();
+}
+document.querySelectorAll('#bets-day-filter .day-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    setBetsDayFilter(btn.dataset.day);
+    if (btn.dataset.day === 'date') {
+      const di = document.getElementById('bets-day-date');
+      try { if (di.showPicker) di.showPicker(); } catch { /* picker needs a user gesture; the input is still usable */ }
+    }
+  });
+});
+document.getElementById('bets-day-date').addEventListener('change', () => { setBetsDayFilter('date'); });
 
 /* ── Best Bets renderer (date range / test mode) ── */
 function renderBetsDateRange(betsByDate, fromDate, toDate) {
@@ -1636,6 +1714,7 @@ document.getElementById('testing-toggle').addEventListener('click', function() {
   testingMode = !testingMode;
   document.getElementById('testing-track').classList.toggle('on', testingMode);
   document.getElementById('bets-test-controls').style.display = testingMode ? '' : 'none';
+  document.getElementById('bets-day-filter').style.display = testingMode ? 'none' : '';
   Object.keys(cache).forEach(k => delete cache[k]);
   cancelPendingRequests();
   loadBets();
