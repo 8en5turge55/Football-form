@@ -574,7 +574,8 @@
 <footer>
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
-  <span style="color:var(--border2)">v1.138</span>
+  <a href="#" id="refresh-data-link" style="color:var(--muted,inherit);text-decoration:underline" title="Discard saved data (kept for 8 hours) and reload everything">↻ Refresh data</a>
+  <span style="color:var(--border2)">v1.139</span>
 </footer>
 
 <script>
@@ -765,6 +766,61 @@ function getAsOfDate() {
 // Raw match data cache (separate from processed cache so we can reprocess for different dates)
 const rawCache = {};
 
+/* ── Persistent browser cache (IndexedDB) — keeps league data for 8 hours so
+     returning to the page doesn't refetch everything ── */
+const PERSIST_TTL_MS = 8 * 60 * 60 * 1000;
+const _idbPromise = new Promise(resolve => {
+  try {
+    const req = indexedDB.open('football-form-cache', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('kv');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+    req.onblocked = () => resolve(null);
+  } catch { resolve(null); }
+});
+async function idbOp(mode, fn) {
+  const db = await _idbPromise;
+  if (!db) return undefined;
+  return new Promise(resolve => {
+    try {
+      const tx = db.transaction('kv', mode);
+      const result = fn(tx.objectStore('kv'));
+      tx.oncomplete = () => resolve(result && 'result' in result ? result.result : undefined);
+      tx.onerror = tx.onabort = () => resolve(undefined);
+    } catch { resolve(undefined); }
+  });
+}
+const persistGet = key => idbOp('readonly', st => st.get(key));
+const persistPut = (key, val) => idbOp('readwrite', st => st.put(val, key));
+const persistDelete = key => idbOp('readwrite', st => st.delete(key));
+const persistAllEntries = () => idbOp('readonly', st => {
+  const out = { result: [] };
+  const req = st.openCursor();
+  req.onsuccess = () => {
+    const c = req.result;
+    if (c) { out.result.push([c.key, c.value]); c.continue(); }
+  };
+  return out;
+});
+async function persistClearAll() { await idbOp('readwrite', st => st.clear()); }
+
+// Load any saved, unexpired league data into rawCache before the first render/preload
+async function hydrateRawCache() {
+  try {
+    const entries = await Promise.race([
+      persistAllEntries(),
+      new Promise(r => setTimeout(() => r([]), 4000)),
+    ]);
+    const now = Date.now();
+    for (const [key, rec] of (entries || [])) {
+      if (!rec || !rec.savedAt || now - rec.savedAt > PERSIST_TTL_MS) { persistDelete(key); continue; }
+      if (key.startsWith('raw:')) {
+        rawCache[key.slice(4)] = { ...rec.data, fetchedAt: rec.savedAt };
+      }
+    }
+  } catch { /* cache is best-effort */ }
+}
+
 // Derive the season start year for a given date.
 // European seasons typically kick off in late July, so July onwards = new season year.
 function seasonYearForDate(date) {
@@ -942,6 +998,11 @@ async function resolveAfLeagueId(afName, afCountry, isoCode) {
 // essentially all "next fixture" cases since those are always upcoming.
 async function fetchAfOddsForLeague(leagueId, season, isPreload) {
   const oddsMap = {}; // fixtureId -> { home, draw, away }
+  const oddsKey = 'odds:' + leagueId + '_' + season;
+  try {
+    const saved = await persistGet(oddsKey);
+    if (saved && saved.savedAt && Date.now() - saved.savedAt < PERSIST_TTL_MS && saved.map) return { ...saved.map };
+  } catch { /* fall through to a live fetch */ }
   try {
     const res = await afApiFetch(`/odds?league=${leagueId}&season=${season}`, isPreload);
     for (const entry of (res.response || [])) {
@@ -959,6 +1020,7 @@ async function fetchAfOddsForLeague(leagueId, season, isPreload) {
       }
       if (vals.home || vals.draw || vals.away) oddsMap[fixtureId] = vals;
     }
+    if (Object.keys(oddsMap).length) persistPut(oddsKey, { savedAt: Date.now(), map: oddsMap });
   } catch { /* odds are best-effort — a failure here shouldn't block form tables */ }
   return oddsMap;
 }
@@ -1022,7 +1084,9 @@ async function fetchRaw(code, asOf, isPreload = false) {
     const p = (async () => {
       try {
         const data = await fetchRawApiFootball(leagueDef, asOf, isPreload);
+        data.fetchedAt = Date.now();
         rawCache[cacheKey] = data;
+        persistPut('raw:' + cacheKey, { savedAt: data.fetchedAt, data });
         return rawCache[cacheKey];
       } catch (e) {
         throw new Error(`Could not load data for ${code}: ${e.message}`);
@@ -1066,7 +1130,7 @@ async function loadLeague(code, asOfDate, isPreload = false) {
   if (_inFlightLoads[cacheKey]) return _inFlightLoads[cacheKey];
 
   const loadPromise = (async () => {
-    const { standData, allMatchData, afLeagueId, afSeason } = await fetchRaw(code, asOf, isPreload);
+    const { standData, allMatchData, afLeagueId, afSeason, fetchedAt } = await fetchRaw(code, asOf, isPreload);
   const allMatches = allMatchData.matches || [];
 
   // Build team list from standings (for names/ids) but recalculate all stats from match history
@@ -1160,7 +1224,7 @@ async function loadLeague(code, asOfDate, isPreload = false) {
   // Odds are fetched lazily by render() when a league is actually viewed —
   // not during preload, to avoid competing with the API-Football request queue
   const oddsMap = {};
-    const data = { teams, teamMap, nextRound, fetched: new Date(), asOf, oddsMap, afLeagueId, afSeason };
+    const data = { teams, teamMap, nextRound, fetched: fetchedAt ? new Date(fetchedAt) : new Date(), asOf, oddsMap, afLeagueId, afSeason };
     cache[cacheKey] = data;
     return data;
   })();
@@ -2058,8 +2122,16 @@ document.addEventListener('click', closeAllDropdowns);
 renderCountryDropdown();
 renderLeagueDropdown();
 
-switchLeague(currentLeague);
-preloadAllLeagues();
+document.getElementById('refresh-data-link').addEventListener('click', async (e) => {
+  e.preventDefault();
+  await persistClearAll();
+  location.reload();
+});
+
+hydrateRawCache().finally(() => {
+  switchLeague(currentLeague);
+  preloadAllLeagues();
+});
 
 // Ensure rawCache has data for a specific season for all leagues
 // Called on demand when a historical date is selected
