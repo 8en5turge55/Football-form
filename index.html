@@ -597,7 +597,7 @@
   <span>Data: football-data.org</span>
   <span id="last-updated"></span>
   <a href="#" id="refresh-data-link" style="color:var(--muted,inherit);text-decoration:underline" title="Discard saved data (kept for 8 hours) and reload everything">↻ Refresh data</a>
-  <span style="color:var(--border2)">v1.141</span>
+  <span style="color:var(--border2)">v1.142</span>
 </footer>
 
 <script>
@@ -1465,6 +1465,9 @@ function analyticsHtml(bets) {
   const total = bets.length;
   if (total === 0) return '';
   const pct = (n, d) => d > 0 ? Math.round(n / d * 100) : 0;
+  // Red (0%) → green (100%) scale: hue 0 → 120
+  const pctColor = p => `hsl(${Math.max(0, Math.min(100, p)) * 1.2}, 70%, 55%)`;
+  const pctSpan = (n, d) => { const p = pct(n, d); return `<span style="color:${pctColor(p)};font-weight:600">${p}%</span>`; };
 
   // Overall stats
   let winners = 0, homeWins = 0, awayWins = 0, totalHome = 0, totalAway = 0;
@@ -1500,7 +1503,7 @@ function analyticsHtml(bets) {
         <td style="padding:4px 8px;font-size:12px;color:var(--text)">${leagueName(key)}</td>
         <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono);color:var(--muted)">${s.total}</td>
         <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono);color:var(--accent)">${s.wins}</td>
-        <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono);color:var(--muted)">${pct(s.wins, s.withRes)}%</td>
+        <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono)">${pctSpan(s.wins, s.withRes)}</td>
       </tr>`).join('');
 
   // By-month breakdown
@@ -1527,7 +1530,7 @@ function analyticsHtml(bets) {
         <td style="padding:4px 8px;font-size:12px;color:var(--text)">${label}</td>
         <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono);color:var(--muted)">${s.total}</td>
         <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono);color:var(--accent)">${s.wins}</td>
-        <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono);color:var(--muted)">${pct(s.wins, s.withRes)}%</td>
+        <td style="padding:4px 8px;font-size:12px;text-align:right;font-family:var(--mono)">${pctSpan(s.wins, s.withRes)}</td>
       </tr>`;
   }).join('');
 
@@ -1551,7 +1554,7 @@ function analyticsHtml(bets) {
   const months = [...monthKeys].sort();
   const monthLabel = mk => { const [yr, mo] = mk.split('-'); return monthNames[parseInt(mo) - 1] + ' ' + yr; };
   const leagueKeysSorted = Object.keys(lm).sort((a, b) => leagueName(a).localeCompare(leagueName(b)));
-  const cellTxt = c => (c && c.withRes) ? `${pct(c.wins, c.withRes)}% <span style="opacity:.6">${c.wins}/${c.withRes}</span>` : '<span style="opacity:.4">–</span>';
+  const cellTxt = c => (c && c.withRes) ? `${pctSpan(c.wins, c.withRes)} <span style="opacity:.6">${c.wins}/${c.withRes}</span>` : '<span style="opacity:.4">–</span>';
   const matrixHtml = `
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse">
@@ -1568,26 +1571,23 @@ function analyticsHtml(bets) {
       </table>
     </div>`;
 
-  // Most reliable summary: highest win % — prefer cells with at least MIN_SAMPLE results, else best of the small ones
-  const MIN_SAMPLE = 3;
-  const bestOf = cells => {            // cells: [{ name, c }]
-    const withData = cells.filter(x => x.c && x.c.withRes > 0);
-    let pool = withData.filter(x => x.c.withRes >= MIN_SAMPLE);
-    const small = pool.length === 0;
-    if (small) pool = withData;
-    pool.sort((a, b) => (b.c.wins / b.c.withRes) - (a.c.wins / a.c.withRes) || b.c.withRes - a.c.withRes || a.name.localeCompare(b.name));
-    return pool.length ? { ...pool[0], small } : null;
-  };
-  const bestTxt = b => b
-    ? `${b.name} <span style="color:var(--accent)">${pct(b.c.wins, b.c.withRes)}%</span> <span style="opacity:.6">${b.c.wins}/${b.c.withRes}${b.small ? ' · small sample' : ''}</span>`
-    : '<span style="opacity:.4">no results yet</span>';
+  // Most reliable summary: list every league / month with a win % above the threshold, best first
+  const MIN_PCT = 60, SMALL_SAMPLE = 3;
+  const aboveThreshold = cells => cells        // cells: [{ name, c }]
+    .filter(x => x.c && x.c.withRes > 0 && (x.c.wins / x.c.withRes) * 100 > MIN_PCT)
+    .sort((a, b) => (b.c.wins / b.c.withRes) - (a.c.wins / a.c.withRes) || b.c.withRes - a.c.withRes || a.name.localeCompare(b.name));
+  const listTxt = list => list.length
+    ? list.map(x => `<div style="white-space:nowrap">${x.name} ${pctSpan(x.c.wins, x.c.withRes)} <span style="opacity:.6">${x.c.wins}/${x.c.withRes}${x.c.withRes < SMALL_SAMPLE ? ' · small sample' : ''}</span></div>`).join('')
+    : `<span style="opacity:.5">none above ${MIN_PCT}%</span>`;
+  const cellStyle = 'padding:4px 8px;font-size:12px;font-family:var(--mono);color:var(--muted);vertical-align:top';
+  const nameStyle = 'padding:4px 8px;font-size:12px;color:var(--text);white-space:nowrap;vertical-align:top';
   const bestByMonthRows = months.map(mk => {
-    const best = bestOf(leagueKeysSorted.map(lk => ({ name: leagueName(lk), c: lm[lk][mk] })));
-    return `<tr><td style="padding:4px 8px;font-size:12px;color:var(--text);white-space:nowrap">${monthLabel(mk)}</td><td style="padding:4px 8px;font-size:12px;font-family:var(--mono);color:var(--muted)">${bestTxt(best)}</td></tr>`;
+    const list = aboveThreshold(leagueKeysSorted.map(lk => ({ name: leagueName(lk), c: lm[lk][mk] })));
+    return `<tr><td style="${nameStyle}">${monthLabel(mk)}</td><td style="${cellStyle}">${listTxt(list)}</td></tr>`;
   }).join('');
   const bestByLeagueRows = leagueKeysSorted.map(lk => {
-    const best = bestOf(months.map(mk => ({ name: monthLabel(mk), c: lm[lk][mk] })));
-    return `<tr><td style="padding:4px 8px;font-size:12px;color:var(--text);white-space:nowrap">${leagueName(lk)}</td><td style="padding:4px 8px;font-size:12px;font-family:var(--mono);color:var(--muted)">${bestTxt(best)}</td></tr>`;
+    const list = aboveThreshold(months.map(mk => ({ name: monthLabel(mk), c: lm[lk][mk] })));
+    return `<tr><td style="${nameStyle}">${leagueName(lk)}</td><td style="${cellStyle}">${listTxt(list)}</td></tr>`;
   }).join('');
   const summaryTable = (head, rows) => `
     <table style="width:100%;border-collapse:collapse">
@@ -1622,17 +1622,17 @@ function analyticsHtml(bets) {
       <div class="bets-stat">
         <span class="bets-stat-val">${winners}</span>
         <span class="bets-stat-label">Total Winners</span>
-        <span class="bets-stat-sub">${pct(winners, withRes)}% of bets with results</span>
+        <span class="bets-stat-sub">${pctSpan(winners, withRes)} of bets with results</span>
       </div>
       <div class="bets-stat">
         <span class="bets-stat-val">${homeWins}</span>
         <span class="bets-stat-label">Home Winners</span>
-        <span class="bets-stat-sub">${pct(homeWins, totalHome)}% of home best bets</span>
+        <span class="bets-stat-sub">${pctSpan(homeWins, totalHome)} of home best bets</span>
       </div>
       <div class="bets-stat">
         <span class="bets-stat-val">${awayWins}</span>
         <span class="bets-stat-label">Away Winners</span>
-        <span class="bets-stat-sub">${pct(awayWins, totalAway)}% of away best bets</span>
+        <span class="bets-stat-sub">${pctSpan(awayWins, totalAway)} of away best bets</span>
       </div>
     </div>
     <div style="margin-top:14px">
@@ -1649,11 +1649,11 @@ function analyticsHtml(bets) {
     </div>
     <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border2)">
       <div class="bets-analytics-title">Most reliable · highest win %</div>
-      <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Ranked among groups with ${MIN_SAMPLE}+ results; if none qualify, the best smaller sample is shown and marked.</div>
-      <div style="font-size:10px;font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Best league in each month</div>
-      ${summaryTable(['Month', 'Best league'], bestByMonthRows)}
-      <div style="font-size:10px;font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px">Best month in each league</div>
-      ${summaryTable(['League', 'Best month'], bestByLeagueRows)}
+      <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:10px">Every league and month with a win % above ${MIN_PCT}%, best first. Groups with fewer than ${SMALL_SAMPLE} results are marked as small samples.</div>
+      <div style="font-size:10px;font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Leagues above ${MIN_PCT}% in each month</div>
+      ${summaryTable(['Month', 'Leagues'], bestByMonthRows)}
+      <div style="font-size:10px;font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px">Months above ${MIN_PCT}% in each league</div>
+      ${summaryTable(['League', 'Months'], bestByLeagueRows)}
     </div>
   </div>`;
 }
